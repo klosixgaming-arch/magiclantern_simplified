@@ -4727,10 +4727,13 @@ CONFIG_INT("menu.upside.down", menu_upside_down, 0);
 
 static volatile uint32_t menu_task_heartbeat = 0;   /* diagnostics: menu_task loop count */
 static volatile uint32_t menu_redraw_do_count = 0;  /* diagnostics: completed menu draws */
+static volatile uint32_t menu_redraw_stage = 0;     /* diagnostics: last step reached in menu_redraw_do */
+static volatile uint32_t menu_redraw_task_loops = 0;
 
 static void
 menu_redraw_do()
 {
+    menu_redraw_stage = 1;
     menu_damage = 0;
     //~ g_submenu_width = 720;
 
@@ -4791,11 +4794,14 @@ menu_redraw_do()
         }
         else
         {
+            menu_redraw_stage = 2;
             bmp_fill(COLOR_BLACK, 0, 40, 720, 400 );
         }
         //~ prev_z = z;
         
+        menu_redraw_stage = 3;
         menus_display( menus, 0, 0 ); 
+        menu_redraw_stage = 4;
 
         if (!menu_lv_transparent_mode && !SUBMENU_OR_EDIT && !junkie_mode)
         {
@@ -4811,7 +4817,11 @@ menu_redraw_do()
         }
 
         if (beta_should_warn())
+        {
+            menu_redraw_stage = 5;
             draw_beta_warning();
+        }
+        menu_redraw_stage = 6;
         
         #ifdef CONFIG_CONSOLE
         console_draw_from_menu();
@@ -4883,6 +4893,7 @@ menu_redraw_do()
     #ifdef CONFIG_VXWORKS   
     set_ml_palette();    
     #endif
+    menu_redraw_stage = 7;
     menu_redraw_do_count++;
     ml_refresh_display_needed = 1;
 }
@@ -4944,6 +4955,7 @@ menu_redraw_task()
     menu_redraw_queue = (struct msg_queue *) msg_queue_create("menu_redraw_mq", 1);
     TASK_LOOP
     {
+        menu_redraw_task_loops++;
         /* this loop will only receive redraw messages */
         int msg;
         int err = msg_queue_receive(menu_redraw_queue, (struct event**)&msg, 500);
@@ -5926,6 +5938,7 @@ TASK_CREATE( "menu_task", menu_task, 0, 0x1a, 0x2000 );
  */
 extern volatile int ml_gui_task_active;      /* gui.c */
 extern volatile uint32_t ml_refresh_count;   /* bmp.c */
+extern volatile uint32_t ml_redraw_task_loops; /* bmp.c */
 extern uint32_t ml_refresh_display_needed;   /* bmp.c */
 
 #define RING_DIAG_HIST 24
@@ -5966,8 +5979,10 @@ static void ring_diag_write(const char *why, struct event *ev, int shown_before,
     RD("led_code=%d menu_shown before=%d after=%d\n", code, shown_before, shown_after);
     RD("ml_gui_task_active=%d menu_task_heartbeat=%d menu_redraw_do_count=%d\n",
        ml_gui_task_active, (int)menu_task_heartbeat, (int)menu_redraw_do_count);
-    RD("ml_refresh_count=%d ml_refresh_display_needed=%d\n",
-       (int)ml_refresh_count, (int)ml_refresh_display_needed);
+    RD("ml_refresh_count=%d ml_refresh_display_needed=%d ml_redraw_task_loops=%d\n",
+       (int)ml_refresh_count, (int)ml_refresh_display_needed, (int)ml_redraw_task_loops);
+    RD("menu_redraw_task_loops=%d menu_redraw_stage=%d menu_redraw_blocked=%d menu_redraw_queue=0x%08X\n",
+       (int)menu_redraw_task_loops, (int)menu_redraw_stage, menu_redraw_blocked, (uint32_t)menu_redraw_queue);
     RD("gui_state=%d CURRENT_GUI_MODE(0x8D70)=0x%X [0x8D6C]=0x%X\n",
        gui_state, CURRENT_GUI_MODE, *(volatile int *)0x8D6C);
     RD("lv=%d lv_paused=%d shooting_mode=%d sensor_cleaning=%d halfshutter=%d\n",
@@ -5990,7 +6005,10 @@ static void ring_diag_write(const char *why, struct event *ev, int shown_before,
     }
     #undef RD
 
-    const char *targets[] = { "RINGDIAG.TXT", "B:/RINGDIAG.TXT", "A:/RINGDIAG.TXT" };
+    char targets[3][24];
+    snprintf(targets[0], sizeof(targets[0]), "RINGDG%d.TXT", ring_diag_writes + 1);
+    snprintf(targets[1], sizeof(targets[1]), "B:/RINGDG%d.TXT", ring_diag_writes + 1);
+    snprintf(targets[2], sizeof(targets[2]), "A:/RINGDG%d.TXT", ring_diag_writes + 1);
     for (int t = 0; t < 3; t++)
     {
         FILE *f = FIO_CreateFile(targets[t]);

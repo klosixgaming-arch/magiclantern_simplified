@@ -60,19 +60,29 @@ extern struct MARV *rgb_vram_info;
  * but it breaks minimal builds that do not support compositor stuff.
  */
 extern struct MARV *_rgb_vram_info;
+/* A usable MARV: right signature and a bitmap that lives in DRAM.
+ * On R6, XCM_GetSourceSurface(_pXCM, 0) returns a non-MARV struct whose
+ * "bitmap" is 0x1E0 - writing through it faults and kills the drawing task. */
+#define rgb_marv_valid(m) \
+    ((m) && ((struct MARV *)(m))->signature == 0x5652414D && \
+     (uint32_t)((struct MARV *)(m))->bitmap_data >= 0x01000000)
+
+#define rgb_marv_canon_layer0() \
+    (rgb_marv_valid(*(struct MARV **)0x14B000) ? *(struct MARV **)0x14B000 : \
+     rgb_marv_valid(*(struct MARV **)0x18384)  ? *(struct MARV **)0x18384  : NULL)
+
 inline uint8_t *rgb_vram_preinit()
 {
 #ifdef CONFIG_COMPOSITOR_XCM
     // Get address of MARV for layer 0 from XCM if ready
     if (_pXCM)
     {
-        rgb_vram_info = XCM_GetSourceSurface(_pXCM, 0);
+        struct MARV *m = XCM_GetSourceSurface(_pXCM, 0);
+        if (rgb_marv_valid(m)) rgb_vram_info = m;
     }
-    if (!rgb_vram_info || !rgb_vram_info->bitmap_data)
+    if (!rgb_marv_valid(rgb_vram_info))
     {
-        struct MARV *m = *(struct MARV **)0x14B000;
-        if (!m || m->signature != 0x5652414D) m = *(struct MARV **)0x18384;
-        if (m && m->signature == 0x5652414D) rgb_vram_info = m;
+        rgb_vram_info = rgb_marv_canon_layer0();
     }
 #else
     // Get address of MARV used by WINSYS to draw GUI

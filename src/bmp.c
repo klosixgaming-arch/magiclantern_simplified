@@ -116,6 +116,8 @@ TASK_CREATE( "redraw_task", refresh_yuv_from_rgb_task, 0, 0x1e, 0x1000 );
 uint32_t ml_refresh_display_needed = 0;
 // number of completed refresh_yuv_from_rgb() calls (diagnostics)
 volatile uint32_t ml_refresh_count = 0;
+// refresh_yuv_from_rgb_task loop count (diagnostics: is the task alive?)
+volatile uint32_t ml_redraw_task_loops = 0;
 
 /** Returns a pointer to currently selected BMP vram (real or mirror) */
 uint8_t * bmp_vram(void)
@@ -212,17 +214,12 @@ void refresh_yuv_from_rgb(void)
     uint8_t *b = bmp_vram_indexed;
     uint32_t *rgb_data = NULL;
 
-    if (rgb_vram_info == NULL || rgb_vram_info->bitmap_data == NULL)
+    if (!rgb_marv_valid(rgb_vram_info))
     {
-        struct MARV *m = *(struct MARV **)0x14B000;
-        if (!m || m->signature != 0x5652414D) m = *(struct MARV **)0x18384;
-        if (m && m->signature == 0x5652414D && m->bitmap_data)
-        {
-            rgb_vram_info = m;
-        }
+        rgb_vram_info = rgb_marv_canon_layer0();
     }
 
-    if (rgb_vram_info != NULL)
+    if (rgb_marv_valid(rgb_vram_info))
     {
         rgb_data = (uint32_t *)rgb_vram_info->bitmap_data;
     }
@@ -318,16 +315,11 @@ void refresh_yuv_from_rgb(void)
 
 void rgba_buffer_clear()
 {
-    if (rgb_vram_info == NULL || rgb_vram_info->bitmap_data == NULL)
+    if (!rgb_marv_valid(rgb_vram_info))
     {
-        struct MARV *m = *(struct MARV **)0x14B000;
-        if (!m || m->signature != 0x5652414D) m = *(struct MARV **)0x18384;
-        if (m && m->signature == 0x5652414D && m->bitmap_data)
-        {
-            rgb_vram_info = m;
-        }
+        rgb_vram_info = rgb_marv_canon_layer0();
     }
-    if (rgb_vram_info == NULL || rgb_vram_info->bitmap_data == NULL) return;
+    if (!rgb_marv_valid(rgb_vram_info)) return;
 
 #if defined(CONFIG_DIGIC_X)
     uint32_t *row = (uint32_t *)rgb_vram_info->bitmap_data;
@@ -358,6 +350,7 @@ void refresh_yuv_from_rgb_task(void *unused)
     #endif
     TASK_LOOP
     {
+        ml_redraw_task_loops++;
         int need = ml_refresh_display_needed;
         #if defined(CONFIG_DIGIC_X)
         /* Canon keeps drawing its own LV overlays into the same Layer 0 MARV,
