@@ -4725,6 +4725,9 @@ static void menu_make_sure_selection_is_valid()
 
 CONFIG_INT("menu.upside.down", menu_upside_down, 0);
 
+static volatile uint32_t menu_task_heartbeat = 0;   /* diagnostics: menu_task loop count */
+static volatile uint32_t menu_redraw_do_count = 0;  /* diagnostics: completed menu draws */
+
 static void
 menu_redraw_do()
 {
@@ -4880,6 +4883,7 @@ menu_redraw_do()
     #ifdef CONFIG_VXWORKS   
     set_ml_palette();    
     #endif
+    menu_redraw_do_count++;
     ml_refresh_display_needed = 1;
 }
 
@@ -5772,6 +5776,7 @@ menu_task( void* unused )
     
     TASK_LOOP
     {
+        menu_task_heartbeat++;
         int keyrepeat_active = keyrepeat &&
             (menu_shown || arrow_keys_shortcuts_active());
         
@@ -5895,6 +5900,204 @@ menu_task_minimal( void* unused )
 }
 
 TASK_CREATE( "menu_task", menu_task, 0, 0x1a, 0x2000 );
+
+#ifdef CONFIG_GUI_EVENT_RING_POLL
+/*
+ * GUI event ring poller (EOS R6 / DIGIC X).
+ *
+ * With CONFIG_NO_TASK_HOOK, ml_gui_main_task never replaces Canon's GuiMainTask,
+ * so no button event ever reaches ML. Canon's event poster (ROM 0xE04E4666)
+ * stores every GUI event in a ring (GUI_EVENT_RING_BASE, 16 B/slot) before posting
+ * a pointer to that slot to gui_main_struct.msg_queue_eosr, so we can observe all
+ * events here without touching Canon's queue.
+ *
+ *  - TRASH (type 0, param BGMT_TRASH): toggle the ML menu (give_semaphore(gui_sem)).
+ *  - Any other type-0 event while the menu is open: fed to handle_ml_menu_keys().
+ *    (Canon still receives these too - we can only observe, not block.)
+ *
+ * LED diagnostics after each TRASH press (all bursts are 1..6 blinks):
+ *    1          TRASH seen in the ring, semaphore given
+ *    then ~0.7 s later:
+ *    2          menu is now OPEN  (menu_open() ran)
+ *    3          menu is now CLOSED (menu_close() ran)
+ *    4          menu state did NOT change (menu_task stuck or closed it right away)
+ *    5          a param==0x14 event arrived with type != 0 (ignored; see RINGDIAG.TXT)
+ * A snapshot of the relevant state is written to RINGDIAG.TXT on the card root.
+ */
+extern volatile int ml_gui_task_active;      /* gui.c */
+extern volatile uint32_t ml_refresh_count;   /* bmp.c */
+extern uint32_t ml_refresh_display_needed;   /* bmp.c */
+
+#define RING_DIAG_HIST 24
+static struct event ring_diag_hist[RING_DIAG_HIST];
+static int ring_diag_hist_n = 0;
+static int ring_diag_writes = 0;
+
+static void ring_led_burst(int n)
+{
+#if defined(CARD_LED_ADDRESS) && defined(LEDON) && defined(LEDOFF)
+    if (n < 1) n = 1;
+    if (n > 6) n = 6;   /* hard limit: never more than 6 blinks */
+    for (int i = 0; i < n; i++)
+    {
+        *(volatile uint32_t *)CARD_LED_ADDRESS = LEDON;
+        msleep(120);
+        *(volatile uint32_t *)CARD_LED_ADDRESS = LEDOFF;
+        msleep(180);
+    }
+    msleep(300);
+#endif
+}
+
+static void ring_diag_write(const char *why, struct event *ev, int shown_before, int shown_after, int code)
+{
+    if (ring_diag_writes >= 8) return;   /* keep card writes bounded */
+
+    static char buf[3072];
+    int len = 0;
+    #define RD(...) len += snprintf(buf + len, sizeof(buf) - len, __VA_ARGS__)
+
+    struct MARV *m0 = *(struct MARV **)0x14B000;
+    struct MARV *m1 = *(struct MARV **)0x18384;
+    extern struct MARV *rgb_vram_info;
+
+    RD("=== R6 GUI RING DIAG #%d: %s ===\n", ring_diag_writes + 1, why);
+    RD("event type=%d param=0x%X obj=0x%08X arg=0x%X\n", ev->type, ev->param, (uint32_t)ev->obj, ev->arg);
+    RD("led_code=%d menu_shown before=%d after=%d\n", code, shown_before, shown_after);
+    RD("ml_gui_task_active=%d menu_task_heartbeat=%d menu_redraw_do_count=%d\n",
+       ml_gui_task_active, (int)menu_task_heartbeat, (int)menu_redraw_do_count);
+    RD("ml_refresh_count=%d ml_refresh_display_needed=%d\n",
+       (int)ml_refresh_count, (int)ml_refresh_display_needed);
+    RD("gui_state=%d CURRENT_GUI_MODE(0x8D70)=0x%X [0x8D6C]=0x%X\n",
+       gui_state, CURRENT_GUI_MODE, *(volatile int *)0x8D6C);
+    RD("lv=%d lv_paused=%d shooting_mode=%d sensor_cleaning=%d halfshutter=%d\n",
+       lv, lv_paused, shooting_mode, sensor_cleaning, get_halfshutter_pressed());
+    RD("beta_should_warn=%d submenu_level=%d edit_mode=%d\n",
+       beta_should_warn(), submenu_level, edit_mode);
+    RD("rgb_vram_info=0x%08X *0x14B000=0x%08X *0x18384=0x%08X\n",
+       (uint32_t)rgb_vram_info, (uint32_t)m0, (uint32_t)m1);
+    if (rgb_vram_info)
+    {
+        RD("  sig=0x%08X bitmap=0x%08X w=%d h=%d\n",
+           rgb_vram_info->signature, (uint32_t)rgb_vram_info->bitmap_data,
+           rgb_vram_info->width, rgb_vram_info->height);
+    }
+    RD("ring index=%d\nlast events (newest first):\n", *(volatile uint32_t *)GUI_EVENT_RING_INDEX_ADDR);
+    for (int i = 0; i < ring_diag_hist_n && i < RING_DIAG_HIST; i++)
+    {
+        struct event *e = &ring_diag_hist[i];
+        RD("  t=%d p=0x%02X obj=0x%08X arg=0x%X\n", e->type, e->param, (uint32_t)e->obj, e->arg);
+    }
+    #undef RD
+
+    const char *targets[] = { "RINGDIAG.TXT", "B:/RINGDIAG.TXT", "A:/RINGDIAG.TXT" };
+    for (int t = 0; t < 3; t++)
+    {
+        FILE *f = FIO_CreateFile(targets[t]);
+        if (f)
+        {
+            FIO_WriteFile(f, buf, len);
+            FIO_CloseFile(f);
+            break;
+        }
+    }
+    ring_diag_writes++;
+}
+
+static void ring_diag_push(struct event *ev)
+{
+    for (int i = RING_DIAG_HIST - 1; i > 0; i--)
+        ring_diag_hist[i] = ring_diag_hist[i - 1];
+    ring_diag_hist[0] = *ev;
+    if (ring_diag_hist_n < RING_DIAG_HIST) ring_diag_hist_n++;
+}
+
+static void gui_ring_poll_task(void *unused)
+{
+    extern int ml_started;
+    while (!ml_started)
+        msleep(100);
+    while (!gui_sem)
+        msleep(100);
+    msleep(500);
+
+    volatile uint32_t *ring_index = (volatile uint32_t *)GUI_EVENT_RING_INDEX_ADDR;
+    const uint32_t slots = GUI_EVENT_RING_SLOTS;
+
+    uint32_t last = *ring_index;
+    if (last >= slots) last = 0;
+    uint32_t target = last;          /* index read on the previous cycle */
+    int last_trash_ms = 0;
+
+    TASK_LOOP
+    {
+        /* Canon bumps the index *before* filling the slot, so only consume up to
+         * the index observed one cycle (>=10 ms) ago - those slots are complete. */
+        uint32_t cur = *ring_index;
+
+        if (target < slots && !ml_gui_task_active)
+        {
+            uint32_t backlog = (target + slots - last) % slots;
+            if (backlog > 64)
+            {
+                /* lost sync (or first run after a long stall): skip stale events */
+                last = target;
+            }
+
+            while (last != target)
+            {
+                volatile uint32_t *slot = (volatile uint32_t *)(GUI_EVENT_RING_BASE + last * 16);
+                struct event ev;
+                ev.type  = (int)slot[0];
+                ev.param = (int)slot[1];
+                ev.obj   = (void *)slot[2];
+                ev.arg   = (int)slot[3];
+                last = (last + 1) % slots;
+
+                if (ev.param == 0 && ev.arg == 0 && ev.type == 0) continue;  /* empty slot */
+                if (ev.param == GMT_OLC_INFO_CHANGED) continue;            /* 0xB7 display refresh spam */
+                ring_diag_push(&ev);
+
+                if (ev.param == BGMT_TRASH)
+                {
+                    if (ev.type != 0)
+                    {
+                        ring_led_burst(5);
+                        ring_diag_write("param 0x14 with non-zero type (ignored)", &ev, menu_shown, menu_shown, 5);
+                        continue;
+                    }
+
+                    int now = get_ms_clock();
+                    if (now - last_trash_ms < 300) continue;   /* debounce */
+                    last_trash_ms = now;
+
+                    int shown_before = menu_shown;
+                    ring_led_burst(1);                 /* TRASH detected */
+                    give_semaphore(gui_sem);           /* menu_task toggles menu_open()/menu_close() */
+
+                    msleep(700);
+                    int shown_after = menu_shown;
+                    int code = (shown_after == shown_before) ? 4 : (shown_after ? 2 : 3);
+                    ring_led_burst(code);
+                    ring_diag_write("TRASH press", &ev, shown_before, shown_after, code);
+                    continue;
+                }
+
+                if (ev.type == 0 && menu_shown && !IS_FAKE((&ev)))
+                {
+                    /* menu navigation: same handler ml_gui_main_task would call */
+                    handle_ml_menu_keys(&ev);
+                }
+            }
+        }
+
+        target = cur;
+        msleep(10);   /* always yield: keep Canon's GUI / IPC tasks alive */
+    }
+}
+
+TASK_CREATE( "gui_ring_poll", gui_ring_poll_task, 0, 0x1a, 0x2000 );
+#endif /* CONFIG_GUI_EVENT_RING_POLL */
 
 //~ TASK_CREATE( "menu_task_minimal", menu_task_minimal, 0, 0x1a, 0x2000 );
 

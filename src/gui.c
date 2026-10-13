@@ -104,6 +104,10 @@ struct gui_main_struct {
 
 extern struct gui_main_struct gui_main_struct;
 
+/* Set once ml_gui_main_task actually runs (i.e. TASK_OVERRIDE is active).
+ * The GUI event ring poller (menu.c) stands down when this is non-zero. */
+volatile int ml_gui_task_active = 0;
+
 void ml_gui_main_task()
 {
     struct event * event = NULL;
@@ -112,6 +116,7 @@ void ml_gui_main_task()
     memcpy(funcs, (void*)GMT_FUNCTABLE, 4*GMT_NFUNCS);
 
     gui_init_end(); // no params?
+    ml_gui_task_active = 1;
 
     while(1)
     {

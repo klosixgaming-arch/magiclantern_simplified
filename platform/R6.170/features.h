@@ -29,3 +29,9 @@
 
 // BISECT: skip task dispatch hook
 #define CONFIG_NO_TASK_HOOK
+
+/* With CONFIG_NO_TASK_HOOK, TASK_OVERRIDE(gui_main_task, ml_gui_main_task) never
+ * takes effect, so ML's button handlers never see any key. Poll Canon's GUI event
+ * ring instead: TRASH toggles the ML menu, other keys are fed to the menu while open.
+ * The poller stands down automatically if ml_gui_main_task ever starts running. */
+#define CONFIG_GUI_EVENT_RING_POLL

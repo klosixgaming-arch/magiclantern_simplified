@@ -90,3 +90,19 @@ extern int winsys_bmp_dirty_bit_neg;
 #define XCM_PTR (*(unsigned int *)0x14B1A8)
 #define XIMR_CONTEXT ((unsigned int *)(XCM_PTR + 0x10))
 
+
+/*
+ * Canon GUI event ring (verified from ROM 1.7.0 + KEYLOG.TXT on hardware).
+ * Canon's GUI event poster at 0xE04E4666 does:
+ *     idx = gui_main_struct.off_0x14;                 // [0x5474]
+ *     gui_main_struct.off_0x14 = (idx + 1) % 0x401;
+ *     ring[idx] = { type, param, obj, arg };           // base 0x7F554, 16 bytes/slot
+ *     post(gui_main_struct.msg_queue_eosr, &ring[idx]);
+ * So every event that GuiMainTask receives is also visible here.
+ * NOTE: 0x00135800 / 0x001357F4 (quoted in older notes) have zero ROM refs - do not use.
+ * Buttons are type 0; Canon also posts type 3 events whose params collide
+ * with button codes (0x10, 0x11, 0x1B, 0x2C, 0x2D, 0x2E, 0x36, 0x38).
+ */
+#define GUI_EVENT_RING_INDEX_ADDR   0x00005474
+#define GUI_EVENT_RING_BASE         0x0007F554
+#define GUI_EVENT_RING_SLOTS        0x401

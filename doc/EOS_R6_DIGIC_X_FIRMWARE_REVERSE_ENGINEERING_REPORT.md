@@ -582,8 +582,30 @@ Through systematic diagnostic LED burst signaling on real hardware (strictly adh
 2. **Current Challenge:**
    * The ML menu does not yet render visually onto the LCD screen when TRASH is pressed.
 3. **Primary Diagnosis for Next Agent:**
-   * **Button Routing:** Determine whether `SwTrash_Button` (0x14) is routed through Canon's `GuiMainTask` message queue (`gui_main_struct.msg_queue_eosr`) during LiveView, or whether ML must intercept TRASH directly via the hardware ring buffer (`0x00135800`), as successfully implemented in `hello_world()`.
+   * **Button Routing:** Determine whether `SwTrash_Button` (0x14) is routed through Canon's `GuiMainTask` message queue (`gui_main_struct.msg_queue_eosr`) during LiveView, or whether ML must intercept TRASH directly via the GUI event ring (`0x7F554`, index `0x5474`; see Section 17), as implemented in `hello_world()`.
    * **Compositor Target Surface:** Verify whether Layer 0 MARV at `*(0x14B000)` / `*(0x18384)` is actively selected as the front overlay surface in LiveView, or if an alternate compositor layer (e.g., Layer 2 or dedicated ML layer via `XCM_SetSourceSurface`) is required.
 
+---
 
+## 17. GUI Event Ring & Task-Hook Root Cause (2026-10-13)
 
+### 17.1 Canon GUI event poster (`0xE04E4666`)
+Disassembly of `boot00.bin` around GuiMainTask (`0xE04E4530`) shows that the only ROM reference to `0x7F554` (literal at `0xE04E49E8`) is used by the event poster:
+
+| Step | Instruction(s) | Effect |
+|---|---|---|
+| 1 | `ldr r5,[r4,#0x14]` (r4 = `0x5460`) | `idx = gui_main_struct.off_0x14` |
+| 2 | `(idx+1) % 0x401` → `str r1,[r4,#0x14]` | index advanced **before** the slot is written |
+| 3 | `add r1, 0x7F554, idx<<4` ; `stm r1,{type,param,obj,arg}` | fill 16-byte slot |
+| 4 | post `&slot` to `[0x5460+0x1C]` | `msg_queue_eosr` |
+| 5 | `[0x5460+0x04]++` | pending-event counter |
+
+GuiMainTask itself (`0xE04E4530`) receives from `+0x1C`, decrements `+0x04`, and dispatches `funcs[event->type]` from the 7-entry table at `0xE0CCC20C`. Callers in the same module post `type 3` events with params `0x10, 0x11, 0x1B, 0x2C, 0x2D, 0x2E, 0x36, 0x38`, which collide with button codes; button events are `type 0`.
+
+**Consequence:** the ring is the storage behind `msg_queue_eosr`, not an independent hardware log. Addresses `0x00135800` / `0x001357F4` have no references in ROM.
+
+### 17.2 Why ML never saw TRASH
+`CONFIG_NO_TASK_HOOK` (in `platform/R6.170/features.h`) prevents `my_task_dispatch_hook` from being installed, so `TASK_OVERRIDE(gui_main_task, ml_gui_main_task)` is inert. Canon's GuiMainTask consumes every event, and ML's `handle_buttons()` is never called.
+
+### 17.3 Workaround implemented
+`CONFIG_GUI_EVENT_RING_POLL` adds the `gui_ring_poll` task (`src/menu.c`), which observes the ring, toggles the ML menu on `type 0 / param 0x14`, and forwards `type 0` events to `handle_ml_menu_keys()` while the menu is open. `refresh_yuv_from_rgb()` now always uses the strided, cache-cleaned Layer 0 path on DIGIC X. See `AGENT_HANDOFF_EOS_R6.md` §9 for the LED codes and `RINGDIAG.TXT` format.

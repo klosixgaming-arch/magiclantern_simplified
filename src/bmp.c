@@ -114,6 +114,8 @@ TASK_CREATE( "redraw_task", refresh_yuv_from_rgb_task, 0, 0x1e, 0x1000 );
 #endif
 // SJE should this global live in bmp.c?
 uint32_t ml_refresh_display_needed = 0;
+// number of completed refresh_yuv_from_rgb() calls (diagnostics)
+volatile uint32_t ml_refresh_count = 0;
 
 /** Returns a pointer to currently selected BMP vram (real or mirror) */
 uint8_t * bmp_vram(void)
@@ -230,8 +232,17 @@ void refresh_yuv_from_rgb(void)
         return;
     }
 
+#if defined(CONFIG_DIGIC_X) && !defined(CONFIG_COMPOSITOR_DEDICATED_LAYER)
+    /* DIGIC X: Layer 0 is 2048 px stride and read by display DMA straight from DRAM.
+     * The contiguous full-alpha copy below ignores the stride and skips the D-cache
+     * clean, so it must never be used here - always take the strided path. */
+    const int digic_x_strided = 1;
+#else
+    const int digic_x_strided = 0;
+#endif
+
 #if !defined(CONFIG_INSTALLER)
-    if(zebra_should_run()){
+    if(!digic_x_strided && zebra_should_run()){
         // always draw our stuff, including full alpha
         for (size_t n = 0; n < BMP_VRAM_SIZE; n++){
             *rgb_data++ = indexed2rgb(*b);
@@ -302,6 +313,7 @@ void refresh_yuv_from_rgb(void)
     }
 #endif
     ml_refresh_display_needed = 0;
+    ml_refresh_count++;
 }
 
 void rgba_buffer_clear()
@@ -346,11 +358,19 @@ void refresh_yuv_from_rgb_task(void *unused)
     #endif
     TASK_LOOP
     {
-        if (ml_refresh_display_needed && !ml_shutdown_requested && DISPLAY_IS_ON)
+        int need = ml_refresh_display_needed;
+        #if defined(CONFIG_DIGIC_X)
+        /* Canon keeps drawing its own LV overlays into the same Layer 0 MARV,
+         * which would erase the ML menu between our 500 ms menu redraws.
+         * While the menu is open, re-push it to Layer 0 every cycle. */
+        extern int gui_menu_shown(void);
+        if (gui_menu_shown()) need = 1;
+        #endif
+        if (need && !ml_shutdown_requested && DISPLAY_IS_ON)
         {
             refresh_yuv_from_rgb();
         }
-        msleep(50); // max 20 fps refresh
+        msleep(50); // max 20 fps refresh, also yields CPU to Canon tasks
     }
 }
 
