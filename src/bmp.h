@@ -63,8 +63,17 @@ extern struct MARV *_rgb_vram_info;
 inline uint8_t *rgb_vram_preinit()
 {
 #ifdef CONFIG_COMPOSITOR_XCM
-    // Get address of MARV for layer 0 from XCM
-    rgb_vram_info = XCM_GetSourceSurface(_pXCM, 0);
+    // Get address of MARV for layer 0 from XCM if ready
+    if (_pXCM)
+    {
+        rgb_vram_info = XCM_GetSourceSurface(_pXCM, 0);
+    }
+    if (!rgb_vram_info || !rgb_vram_info->bitmap_data)
+    {
+        struct MARV *m = *(struct MARV **)0x14B000;
+        if (!m || m->signature != 0x5652414D) m = *(struct MARV **)0x18384;
+        if (m && m->signature == 0x5652414D) rgb_vram_info = m;
+    }
 #else
     // Get address of MARV used by WINSYS to draw GUI
     struct MARV *MARV = _rgb_vram_info;

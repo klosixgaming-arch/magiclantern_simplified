@@ -57,6 +57,17 @@ static int my_init_task(int a, int b, int c, int d)
     qprintf("[BOOT] calling local pre_init_task %X...\n", (uint32_t) &local_pre_init_task);
     local_pre_init_task();
 #endif
+#if defined(CARD_LED_ADDRESS) && defined(LEDON) && defined(LEDOFF)
+    /* 3 quick diagnostic blinks when DryOS transfers control to my_init_task */
+    for (int k = 0; k < 3; k++)
+    {
+        *(volatile uint32_t *)CARD_LED_ADDRESS = LEDON;
+        for (volatile int j = 0; j < 300000; j++);
+        *(volatile uint32_t *)CARD_LED_ADDRESS = LEDOFF;
+        for (volatile int j = 0; j < 300000; j++);
+    }
+#endif
+
     qprintf("[BOOT] calling pre_init_task %X...\n", (uint32_t) &boot_pre_init_task);
     boot_pre_init_task();
 

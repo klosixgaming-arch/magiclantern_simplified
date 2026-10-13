@@ -457,6 +457,14 @@ static int get_default_white_level()
      -437, 10000,    1336, 10000,   5131, 10000
 #endif
 
+#ifdef CONFIG_R6 // EOS R6 from LibRaw
+    #define CAM_COLORMATRIX1 \
+     9766, 10000,   -2953, 10000,  -1254, 10000, \
+    -4276, 10000,   12116, 10000,   2433, 10000, \
+     -437, 10000,    1336, 10000,   5131, 10000
+#endif
+
+
 #ifdef CONFIG_M50 // from https://github.com/LibRaw/LibRaw src/tables/colordata.cpp
     // { LIBRAW_CAMERAMAKER_Canon, "EOS M50", 0, 0,
     //   { 8532,-701,-1167,-4095,11879,2508,-797,2424,7010 } },
@@ -623,6 +631,11 @@ static int dynamic_ranges[] = {1105, 1086, 1065, 1038, 1000, 936, 846, 773, 676,
 #ifdef CONFIG_R5
 static int dynamic_ranges[] = {1333, 1218, 1255, 1127, 1038, 939, 845, 747, 643, 552, 452};
 #endif
+
+#ifdef CONFIG_R6
+static int dynamic_ranges[] = {1430, 1318, 1255, 1127, 1038, 939, 845, 747, 643, 552, 452};
+#endif
+
 
 /** M50 data missing from DxO.
  *  For now I just copied R

@@ -115,6 +115,10 @@ static void my_bzero32(void *buf, size_t len)
     bzero32(buf, len);
 }
 
+/* Diagnostic copies of the DryOS init struct, written to the card log later */
+uint32_t ml_dryos_info_before[8] = {0};
+uint32_t ml_dryos_info_after[8] = {0};
+
 static void my_create_init_task(struct dryos_init_info *dryos, uint32_t init_task, uint32_t c)
 {
 #ifdef CONFIG_FIXUP_BOOT_MEMORY
@@ -173,6 +177,9 @@ static void my_create_init_task(struct dryos_init_info *dryos, uint32_t init_tas
     // We reserve space before DryOS user_mem, this means the start
     // address is fixed per cam, by RESTARTSTART in
     // platform/99D/Makefile
+
+    for (int i = 0; i < 8; i++)
+        ml_dryos_info_before[i] = ((uint32_t *)dryos)[i];
 
     // basic tests on layout of regions
     if(dryos->sys_objs_start < dryos->sys_mem_start
@@ -250,12 +257,23 @@ static void my_create_init_task(struct dryos_init_info *dryos, uint32_t init_tas
         goto fail;
     }
 
+    for (int i = 0; i < 8; i++)
+        ml_dryos_info_after[i] = ((uint32_t *)dryos)[i];
+
     create_init_task(dryos, init_task, c);
 
     return;
 
 fail:
-    while(1); // SJE FIXME kitor wants to do cool stuff here
+    while(1)
+    {
+#if defined(CARD_LED_ADDRESS) && defined(LEDON) && defined(LEDOFF)
+        *(volatile uint32_t *)CARD_LED_ADDRESS = LEDON;
+        for (volatile int i = 0; i < 200000; i++);
+        *(volatile uint32_t *)CARD_LED_ADDRESS = LEDOFF;
+        for (volatile int i = 0; i < 200000; i++);
+#endif
+    }
 }
 
 /* M50: Canon code calling these cache functions expects R3 to be preserved after the call */

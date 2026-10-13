@@ -278,8 +278,10 @@ cstart( void )
     #if defined(CONFIG_40D) || defined(CONFIG_5DC)
         MEM(LEDBLUE) = LEDON;
         MEM(LEDRED)  = LEDON; // do we need the red too ?
-    #elif defined(CARD_LED_ADDRESS) && defined(LEDON) // A more portable way, hopefully
+    #elif defined(CARD_LED_ADDRESS) && defined(LEDON) && defined(LEDOFF) // A more portable way, hopefully
         MEM(CARD_LED_ADDRESS) = LEDON;
+        busy_wait(10);
+        MEM(CARD_LED_ADDRESS) = LEDOFF;
     #endif
 
     blob_memcpy(

@@ -1,0 +1,82 @@
+===================================================================================================================
+CANON EOS R6 FIRMWARE 1.7.0 (DIGIC X) - REVERSE-ENGINEERED ROM SYMBOL REFERENCE TABLE
+Source: gang100.bin (64 MB ROM dump)
+===================================================================================================================
+Category               | Symbol Name                      | Address    | Type     | Description / Verification
+-------------------------------------------------------------------------------------------------------------------
+Boot & Startup         | MAIN_FIRMWARE_ADDR               | 0xE0100000 | CONST    | Main firmware entry address [Hardware vector in ROM header]
+Boot & Startup         | SECONDARY_CORE_POKE              | 0xDFFC4FA0 | CONST    | Secondary DIGIC X core unhalt register (set to MAIN_FIRMWARE_ADDR | 1) [Verified on real hardware: prevents LiveView freeze]
+Boot & Startup         | cstart                           | 0xE01000EC | THUMB_FN | Initializes C runtime and passes DryOS layout to create_init_task [cstart entry point]
+Boot & Startup         | bzero32                          | 0xE07D9B80 | THUMB_FN | 32-bit zero-fill routine [Called by cstart]
+Boot & Startup         | create_init_task                 | 0xE0276680 | THUMB_FN | DryOS initialization and memory layout configuration [Called by cstart with DryOS init struct]
+Boot & Startup         | init_task                        | 0xE0100222 | THUMB_FN | First DryOS task: user memory initialization, dmSetup, stdlib [Passed to create_init_task]
+Boot & Startup         | fixup_boot_memory                | 0xE0005B19 | THUMB_FN | Canon bootloader memory restore function [Hardware verified: clears CamIF error flags]
+Boot & Startup         | dcache_clean                     | 0xE07D38D4 | THUMB_FN | L1/L2 data cache clean / flush [MCR p15 loop in ROM]
+Boot & Startup         | icache_invalidate                | 0xE07D39A8 | THUMB_FN | Instruction cache invalidate [MCR p15 loop in ROM]
+-------------------------------------------------------------------------------------------------------------------
+Memory & Layout        | RESTARTSTART                     | 0x00190060 | CONST    | Magic Lantern load base in user memory (16MB allocated) [Allocated from DryOS user_mem pool]
+Memory & Layout        | sys_mem_start                    | 0x00001000 | STRUCT   | DryOS system memory start [Extracted from DryOS init struct]
+Memory & Layout        | user_mem_start                   | 0x00190058 | STRUCT   | DryOS user memory start (before ML reservation) [Extracted from DryOS init struct]
+-------------------------------------------------------------------------------------------------------------------
+Tasks & Scheduling     | current_task                     | 0x00001028 | DATA_PTR | Pointer to current running DryOS task descriptor [DryOS task scheduler core]
+Tasks & Scheduling     | current_interrupt                | 0x00001010 | DATA_PTR | Active interrupt ID register [VBAR + 0x18 vector handler]
+Tasks & Scheduling     | msleep                           | 0xE07C08D6 | THUMB_FN | Task sleep routine (milliseconds in multiples of 10) [DryOS scheduler timer]
+Tasks & Scheduling     | task_create                      | 0xE07BCFB6 | THUMB_FN | Create and enqueue a new DryOS preemptive task [Hardware verified via ml_heartbeat task]
+-------------------------------------------------------------------------------------------------------------------
+Synchronization        | take_semaphore                   | 0xE07E15F8 | THUMB_FN | Take DryOS semaphore with timeout (r0=sem, r1=timeout_ms) [KerSem.c line 307 (0x133), used in VMIX before Ximr]
+Synchronization        | give_semaphore                   | 0xE07E1672 | THUMB_FN | Release DryOS semaphore (r0=sem) [KerSem.c line 354 (0x162), used in VMIX after Ximr]
+Synchronization        | create_named_semaphore           | 0xE07E14FC | THUMB_FN | Create named counting semaphore [KerSem.c string references]
+Synchronization        | CreateRecursiveLock              | 0xE07C980A | THUMB_FN | Create recursive mutex lock [KerRLock.c]
+Synchronization        | AcquireRecursiveLock             | 0xE07C9752 | THUMB_FN | Acquire recursive mutex lock [KerRLock.c]
+Synchronization        | ReleaseRecursiveLock             | 0xE07C97AA | THUMB_FN | Release recursive mutex lock [KerRLock.c]
+Synchronization        | msg_queue_create                 | 0xE07C48C4 | THUMB_FN | Create DryOS message queue [KerQueue.c]
+Synchronization        | msg_queue_receive                | 0xE07C4988 | THUMB_FN | Receive from message queue [KerQueue.c]
+Synchronization        | msg_queue_post                   | 0xE07C4A1A | THUMB_FN | Post message to queue [KerQueue.c]
+-------------------------------------------------------------------------------------------------------------------
+Display & Compositor   | _pXCM                            | 0x0014B1A8 | DATA_PTR | Canon Compositor context pointer (Ximr Context Maker) [Referenced at 0xE025FF4C & 0xE0260470 in VMIX]
+Display & Compositor   | XCM_GetSourceSurface             | 0xE0174960 | THUMB_FN | Retrieve MARV descriptor for GUI Layer 0 from XCM [Called at 0xE02600BE in VMIX_TransferRectangleToVram]
+Display & Compositor   | XCM_MakeContext                  | 0xE0174856 | THUMB_FN | Construct XCM compositor context [String ref at 0xE0174B18]
+Display & Compositor   | winsys_sem                       | 0x000183B8 | DATA_PTR | Display rendering synchronization semaphore [Loaded at 0xE02600AA in VMIX (0x183B4 + 4)]
+Display & Compositor   | _rgb_vram_info                   | 0x00018374 | DATA_PTR | Static pointer to Canon RGBA VRAM / MARV Layer metadata [Loaded at 0xE023315C in RENDERER_InitializeScreen]
+Display & Compositor   | XimrExe                          | 0xE01A1D0C | THUMB_FN | Hardware blitter dispatch to GPU / display controller [Called at 0xE02600D0 in VMIX before 'XimrExe' msg]
+Display & Compositor   | VMIX_TransferRectangleToVram     | 0xE025FECC | THUMB_FN | Blit dirty screen rectangles to display buffer [String ref at 0xE025FFE8]
+Display & Compositor   | RENDERER_InitializeScreen        | 0xE0233150 | THUMB_FN | Initialize screen layers and MARV descriptors [String refs at 0xE023355C & 0xE02335AC]
+Display & Compositor   | dialog_redraw                    | 0xE0795AE0 | THUMB_FN | Trigger redraw of active Canon dialog [Referenced by GUI dialog dispatch]
+Display & Compositor   | LiveViewApp_dialog               | 0x00016214 | DATA_PTR | LiveView application dialog structure [GUI dialog tables]
+-------------------------------------------------------------------------------------------------------------------
+File I/O & Storage     | _FIO_OpenFile                    | 0xE07BC4F2 | THUMB_FN | Open existing file (POSIX open equivalent) [Storage.c, checks drive letter A/B]
+File I/O & Storage     | _FIO_CreateFile                  | 0xE07BC5B2 | THUMB_FN | Create new file on storage (POSIX creat) [Hardware verified on real camera (Blink 3)]
+File I/O & Storage     | _FIO_RemoveFile                  | 0xE07BC724 | THUMB_FN | Delete file from storage (POSIX unlink) [Storage.c]
+File I/O & Storage     | _FIO_ReadFile                    | 0xE07BC7B8 | THUMB_FN | Read data from open file descriptor [Storage.c]
+File I/O & Storage     | _FIO_WriteFile                   | 0xE07BCCA0 | THUMB_FN | Write data to file descriptor (takes storage mutex) [Storage.c, calls 0xE01AED88]
+File I/O & Storage     | FIO_CloseFile                    | 0xE07BD416 | THUMB_FN | Close open file descriptor [Storage.c]
+File I/O & Storage     | _FIO_GetFileSize64               | 0xE07BD62E | THUMB_FN | Query 64-bit file size [Storage.c]
+File I/O & Storage     | _FIO_CreateDirectory             | 0xE07BE484 | THUMB_FN | Create directory on storage [Storage.c]
+File I/O & Storage     | dump_file                        | 0xE029F9CC | THUMB_FN | Canon built-in safe file dumper to A:/%s or B:/%s [Used by Canon gang dumper at 0xE029FE34]
+-------------------------------------------------------------------------------------------------------------------
+GUI & Events           | gui_main_struct                  | 0x00005460 | DATA_PTR | Top-level GUI state structure [Referenced in 'QueueClearFlg Clear']
+GUI & Events           | gui_task_list                    | 0x0002109C | DATA_PTR | Linked list of registered GUI tasks [WINSYS_CreateController()]
+GUI & Events           | gui_main_task                    | 0xE04E4530 | THUMB_FN | Canon main GUI message loop task [Task entry point]
+GUI & Events           | gui_enqueue_message              | 0xE04E4666 | THUMB_FN | Enqueue user interface event message [warning! QueueLength= string ref]
+GUI & Events           | SetGUIRequestMode                | 0xE07A226A | THUMB_FN | Request GUI state change (Play, Menu, LiveView) [SetGUIRequestMode debug string]
+GUI & Events           | PlayMain_handler                 | 0xE075099E | THUMB_FN | Playback mode event handler [PlayMain_StartPlayMain]
+GUI & Events           | ShootOlcApp_handler              | 0xE09EFDA2 | THUMB_FN | Shooting / LiveView top event handler [StartShootOlcApp]
+-------------------------------------------------------------------------------------------------------------------
+Memory Allocation      | _AllocateMemory                  | 0xE07DCB1C | THUMB_FN | Allocate heap memory block [Allocates from DryOS kernel heap]
+Memory Allocation      | _FreeMemory                      | 0xE07DCCD4 | THUMB_FN | Free heap memory block [Paired with _AllocateMemory]
+Memory Allocation      | GetMemoryInformation             | 0xE07DC982 | THUMB_FN | Query heap total / free memory bytes [Memory diagnostic function]
+Memory Allocation      | GetSizeOfMaxRegion               | 0xE07DC97A | THUMB_FN | Query largest contiguous free block [Memory diagnostic function]
+Memory Allocation      | AllocateMemoryResource           | 0xE09E2B4E | THUMB_FN | Allocate high-level memory resource [Resource manager]
+Memory Allocation      | AllocateContinuousMemoryResource | 0xE09E2B82 | THUMB_FN | Allocate physically contiguous memory [Resource manager DMA buffer]
+Memory Allocation      | FreeMemoryResource               | 0xE09E2BA0 | THUMB_FN | Free memory resource [Resource manager]
+Memory Allocation      | GetFirstChunkFromSuite           | 0xE07C3CDA | THUMB_FN | Get first chunk from memory suite [PackMem.c]
+Memory Allocation      | GetNextMemoryChunk               | 0xE07C3B0C | THUMB_FN | Get next chunk from memory suite [PackMem.c]
+Memory Allocation      | GetMemoryAddressOfMemoryChunk    | 0xE07C38BE | THUMB_FN | Get virtual memory address of chunk [PackMem.c]
+-------------------------------------------------------------------------------------------------------------------
+Debug & Utilities      | DryosDebugMsg                    | 0xE07C74C4 | THUMB_FN | Low-level DryOS kernel debug message logger [Debug message formatter]
+Debug & Utilities      | call                             | 0xE07CEA6C | THUMB_FN | Execute Canon dynamic event procedure by name [Eventprocedure dispatcher]
+Debug & Utilities      | vsnprintf                        | 0xE012325C | THUMB_FN | Standard C vsnprintf string formatter [LogFile_printf helper]
+Debug & Utilities      | SetTimerAfter                    | 0xE07CD9C0 | THUMB_FN | DryOS 1ms precision timer callback [SystemIF::Timer1m.c]
+-------------------------------------------------------------------------------------------------------------------
+Hardware I/O           | CARD_LED_ADDRESS                 | 0xD0130070 | CONST    | SD card activity LED register (0x4D = ON, 0x4C = OFF) [Hardware verified: single blinks and heartbeat]
+===================================================================================================================

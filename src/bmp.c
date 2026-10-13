@@ -231,7 +231,7 @@ void refresh_yuv_from_rgb(void)
             for(uint x = 0; x < BMPPITCH; x++ )
             {
                 uint32_t rgb = indexed2rgb(*b);
-                if ((rgb && 0xff000000) == 0x00000000)
+                if ((rgb & 0xff000000) == 0x00000000)
                     rgb_data++;
                 else
                     *rgb_data++ = rgb;
@@ -247,7 +247,7 @@ void refresh_yuv_from_rgb(void)
             // don't copy into dest.  This is COLOR_TRANSPARENT_BLACK in
             // the LUT
             uint32_t rgb = indexed2rgb(*b);
-            if ((rgb && 0xff000000) == 0x00000000)
+            if ((rgb & 0xff000000) == 0x00000000)
                 rgb_data++;
             else
                 *rgb_data++ = rgb;
@@ -262,9 +262,12 @@ void refresh_yuv_from_rgb(void)
 #ifdef CONFIG_DIGIC_VI
     XimrExe((void *)XIMR_CONTEXT);
 #else
-    take_semaphore(winsys_sem, 0);
-    XimrExe((void *)XIMR_CONTEXT);
-    give_semaphore(winsys_sem);
+    if (XCM_PTR && winsys_sem)
+    {
+        take_semaphore(winsys_sem, 0);
+        XimrExe((void *)XIMR_CONTEXT);
+        give_semaphore(winsys_sem);
+    }
 #endif
     ml_refresh_display_needed = 0;
 }

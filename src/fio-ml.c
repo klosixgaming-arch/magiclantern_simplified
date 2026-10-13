@@ -213,6 +213,11 @@ static void startup_warning(char* msg)
 
 void _find_ml_card()
 {
+#if defined(CONFIG_DIGIC_X)
+    /* EOS R6: active boot card is always B:/ (SD slot). Probing empty slot A:/ via FIO_FindFirstEx hangs hardware. */
+    ML_CARD = &available_cards[CARD_B];
+    SHOOTING_CARD = &available_cards[CARD_B];
+#else
     int ml_cf = is_dir("A:/ML");
     int ml_sd = is_dir("B:/ML");
 
@@ -244,6 +249,7 @@ void _find_ml_card()
     {
         startup_warning("Could not find ML files.");
     }
+#endif
 }
 
 PROP_HANDLER(PROP_CARD_SELECT)
