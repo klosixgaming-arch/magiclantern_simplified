@@ -1,0 +1,199 @@
+================================================================================
+=== CANON EOS R6 FIRMWARE 1.7.0 -- OPTION C: QEMU HARDWARE EMULATION SPEC    ===
+================================================================================
+Target Architecture : Dual-Core ARM Cortex-A53 (AArch32 mode) / DIGIC X
+OS Kernel           : Canon DryOS Kernel 2.0
+Primary ROM File    : gang100.bin (64 MB, SHA256 verified)
+Secondary ROM File  : gang200.bin (32 MB, Bootloader & Mirror)
+
+--------------------------------------------------------------------------------
+1. PHYSICAL MEMORY MAP & MMU LAYOUT (ARMv7 Short-Descriptor L1 Page Table)
+--------------------------------------------------------------------------------
+Region                  Physical Address        Size        MMU Attributes
+--------------------------------------------------------------------------------
+Cached LPDDR4 DRAM      0x00002000 - 0x3FFFFFFF 1024 MB     Inner WB/WA, Outer WB/WA
+Uncached DRAM Alias     0x40000000 - 0xBEFFFFFF 2032 MB     Shared, Strongly-Ordered
+Primary MMIO Window     0xBF000000 - 0xDEFFFFFF 512 MB      Device, Non-Cacheable, XN
+Internal SRAM (SRAM0)   0xDFFC0000 - 0xDFFFFFFF 256 KB      Early Stack, Boot Page Table
+Main Firmware ROM       0xE0000000 - 0xE7FFFFFF 64 MB       Read-Only, Executable (gang100)
+Device MMIO Bank 2      0xE8000000 - 0xEFFFFFFF 128 MB      Device, Non-Cacheable, XN
+Secondary Flash ROM     0xF0000000 - 0xF7FFFFFF 32 MB       Read-Only, Executable (gang200)
+ARM MPCore Peripherals  0xF8000000 - 0xF8FFFFFF 16 MB       Device, Non-Cacheable, XN
+High ROM / Flash Mirror 0xF9000000 - 0xFFFFFFFF 112 MB      Read-Only, Flash Mirror
+
+Boot Exception Vectors:
+  Reset Vector (Cold Boot) : 0xE0000000 -> Branch to 0xE0068AD8 (AArch32 Thumb)
+  Vector Base Reg (VBAR)   : 0xE000001D (Set during early boot via CP15 c12, c0, 0)
+  Early TTBR0 Base         : 0xDFFC0000 (Internal SRAM page table)
+  DryOS Final TTBR0 Base   : 0x00020000 (DRAM L1 page table)
+
+--------------------------------------------------------------------------------
+2. INTERRUPT CONTROLLER ARCHITECTURE (Two-Level Cascaded GICv2 + INTC)
+--------------------------------------------------------------------------------
+Level 1: ARM Generic Interrupt Controller (GICv2)
+  GIC Distributor Base     : 0xF8C10000 (Alias at 0xF8C19000)
+  GIC CPU Interface Base   : 0xF8C00000 (Alias at 0xF8C04000)
+
+  Interrupt Routing (DryOS Task Registry at 0x00031A34):
+    SGI 00 - 15 : Software Generated Interrupts (Inter-core IPIs)
+                  [10] GIC_scheduling  - Task preemption dispatcher
+                  [11] GIC_timer       - Kernel tick synchronization
+                  [12] GIC_suspend     - Core power gating
+    PPI 16 - 31 : Private Peripheral Interrupts (Per-Core)
+                  [27] GIC_GlobalTimer - 64-bit ARM Global Timer
+                  [28] GIC_LegacyFiq   - High-priority FIQ line
+                  [29] GIC_PrivateTimer- Core Private Watchdog/Timer
+                  [30] GIC_Watchdog    - Core Watchdog
+                  [31] GIC_LegacyIrq   - Legacy IRQ passthrough
+    SPI 32      : Cascades to Marius Primary Interrupt Controller (0xC0380000)
+    SPI 33      : Cascades to Omar Secondary Interrupt Controller (0xC043F000)
+    SPI 34 - 63 : Direct Shared Peripheral Interrupts (PCIe, USB, Postman)
+
+Level 2: Marius & Omar ASIC Interrupt Controllers (640 Discrete Vectors)
+  Marius INTC Base : 0xC0380000
+  Omar INTC Base   : 0xC043F000
+  Registry Address : 0x0002F810 (640 registered vector handler pointers)
+
+  Key Vector Assignments for QEMU Emulation:
+    [008] TMU_INT_SWA             : Timing Measurement Unit
+    [011] TCU_T0OUT               : Timer Control Unit Channel 0
+    [012] POSTMAN_RCVINT0         : Inter-Processor Communication Rx Core 0
+    [013] POSTMAN_FIFOINT0        : Inter-Processor Communication FIFO Core 0
+    [014] MARIUS_TIMER_OC0_INT    : Hardware Timer 0 Output Compare
+    [015] MARIUS_TIMER_IC0_INT    : Hardware Timer 0 Input Capture
+    [030] MARIUS_TIMER_OC1_INT    : Hardware Timer 1 Output Compare
+    [046] MARIUS_TIMER_OC2_INT    : Hardware Timer 2 Output Compare
+    [062] MARIUS_TIMER_OC3_INT    : Hardware Timer 3 Output Compare
+    [078] MARIUS_TIMER_OC4_INT    : Hardware Timer 4 Output Compare
+    [001] EDOMAIN_EDMAC_1_WR_M1   : Video EDMAC Write Channel 1
+    [002] EDOMAIN_EDMAC_6_WR_SS7  : Video EDMAC Write Channel 6
+    [003] EDOMAIN_EDMAC_3_RD_S1_A : Video EDMAC Read Channel 3
+    [004] EDOMAIN_VITON1          : Display Controller VBLANK Frame IRQ
+
+--------------------------------------------------------------------------------
+3. CORE HARDWARE PERIPHERAL REGISTER MAP (FOR QEMU DEVICE IMPLEMENTATION)
+--------------------------------------------------------------------------------
+[1] Reset Generator (RSTGEN)
+  Base Address : 0xC0000000
+  Size         : 0x1000 (4 KB)
+  Registers    : 0xC0000000 (+0x00) Subsystem Software Reset Register
+                 0xC0000004 (+0x04) Peripheral Reset Release Control
+                 0xC0000010 (+0x10) Memory Controller Reset State
+
+[2] Clock Generator (CLKGEN)
+  Base Address : 0xC000F000
+  Size         : 0x1000 (4 KB)
+  Registers    : 0xC000F000 (+0x00) PLL Control & Master Divider
+                 0xC000F020 (+0x20) Core Clock Gate Register
+                 0xC000F060 (+0x60) Peripheral Clock Gate Register
+                 0xC000F120 (+0x120) EDMAC / Display Clock Enable
+
+[3] Power Generator (PWRGEN)
+  Base Address : 0xC001F000
+  Size         : 0x1000 (4 KB)
+  Registers    : 0xC001F000 (+0x00) Power Domain Control (Dolphin/Omar/PCIe)
+                 0xC001F030 (+0x30) Sleep & Deep Sleep Mode Latches
+
+[4] Marius Hardware Timers (TIMERS_MARIUS)
+  Base Address : 0xC0208000
+  Size         : 0x1000 (4 KB)
+  Register Layout:
+    0xC0208800 (+0x800) Timer Master Control Register
+    0xC0208830 (+0x830) Prescaler / Clock Source Select
+    0xC0208850 (+0x850) Free-running Counter Value
+    Channel Output Compare Match Registers (16-Byte Stride):
+      0xC0208890 (+0x890) Timer Channel 0 Match Value
+      0xC02088A0 (+0x8A0) Timer Channel 1 Match Value
+      0xC02088B0 (+0x8B0) Timer Channel 2 Match Value
+      0xC02088C0 (+0x8C0) Timer Channel 3 Match Value
+      0xC02088D0 (+0x8D0) Timer Channel 4 Match Value
+
+[5] Serial Debug Port (UART_SERIAL)
+  Base Address : 0xC0334000
+  Size         : 0x1000 (4 KB)
+  Register Layout:
+    0xC0334000 (+0x00) Status Register (Bit 0: TX FIFO Empty, Bit 1: RX Ready)
+    0xC0334070 (+0x70) Baud Rate Generator Divisor
+    0xC0334080 (+0x80) TX Data FIFO Register (Writes output directly to console)
+    0xC03340F0 (+0xF0) Control Register (Enable TX/RX, 8N1 format)
+
+[6] GPIO & Pinmux Controller (GPIO_PINMUX)
+  Base Address : 0xD2239000
+  Size         : 0x2000 (8 KB)
+  Key Registers:
+    0xD22390C0 (+0x0C0) CARD_LED Control
+                        Value 0x024D0002 : LED ON (SD Activity Light Lit)
+                        Value 0x024C0003 : LED OFF
+    0xD2239134 (+0x134) SD Card Detect Switch Status
+    0xD2239140 (+0x140) Battery Door & Power Switch Status
+
+[7] Display Engine & Compositor (MARV / OMAR)
+  Base Address : 0xD2410000 & 0xD241C000
+  Size         : 0x10000 (64 KB)
+  Compositor Structure:
+    Layer 0 (Graphics UI) : Pointer at 0x14B000 (0x22788900)
+                            Format : 32-bit ARGB (Top-Down DIB)
+                            Size   : 960 x 540 active (2048 x 1080 canvas)
+    Layer 1 (LiveView Video) : Pointer at 0x18384
+                            Format : 16-bit YUV422 (UYVY) stream from sensor
+                            Blended dynamically by hardware compositor into LCD
+
+[8] Video EDMAC Channels (Enhanced Direct Memory Access)
+  Channel Base Addresses:
+    EDMAC_0 : 0xD0B00000
+    EDMAC_1 : 0xD0B10000
+    EDMAC_2 : 0xD0B20000
+    EDMAC_5 : 0xD0B50000
+    EDMAC_8 : 0xD0B80000
+    EDMAC_A : 0xD0BA0000
+    EDMAC_D : 0xD0BD0000
+    EDMAC_E : 0xD0BE0000
+  Channel Register Layout:
+    +0x0000 : Channel Control & Enable Register
+    +0x0008 : Source Memory Buffer Physical Address
+    +0x0018 : Destination Memory Buffer Physical Address
+    +0x00B8 : Channel Status & Interrupt Flag
+    +0x2800 : Horizontal Stride / Line Pitch
+    +0x2900 : Line Count / Transfer Height
+
+--------------------------------------------------------------------------------
+4. QEMU IMPLEMENTATION GUIDANCE
+--------------------------------------------------------------------------------
+1. Memory Setup:
+   - Map 1024MB RAM at 0x00000000.
+   - Map gang100.bin at 0xE0000000 (64 MB).
+   - Map gang200.bin at 0xF0000000 (32 MB) and mirror at 0xF8000000.
+   - Allocate 256KB internal SRAM at 0xDFFC0000.
+2. CPU Core:
+   - Set Cortex-A53 dual core, AArch32 mode.
+   - Reset PC = 0xE0000000.
+3. Stubbing Unimplemented Peripherals:
+   - Provide read-as-zero / write-ignored stubs for RSTGEN (0xC0000000),
+     CLKGEN (0xC000F000), PWRGEN (0xC001F000), and CLKGATE (0xC0600000).
+   - Return 0x00000001 for 0xD2220404 during bootloader handoff.
+   - Implement UART TX at 0xC0334080 so DryOS boot logs print directly to stdio.
+--------------------------------------------------------------------------------
+5. KERNEL SYNCHRONIZATION & PANIC ARCHITECTURE (FOR QEMU AGENT)
+--------------------------------------------------------------------------------
+1. Debug / Panic Message Formatter (0xE04BF000):
+   - Signature: void print_msg(const char *fmt, ...);
+   - Calling Convention: AAPCS (r0 = fmt, r1..r3 = args, extra on stack).
+   - Internals: Pushes {r0-r3} to stack, acquires spinlock 0x00004144 via 0xE0354F64,
+     passes va_list (sp+12) to vfprintf engine at 0xE045036A, releases spinlock.
+
+2. Spinlock Implementation (0xE0354F64):
+   - Uses ARM LDREX/STREX with exclusive monitor.
+   - Contention spin counter: 0xE0CBD51C (Default: 0x00100000 = 1,048,576 spins).
+   - On Timeout: Invokes vector at 0x000040B4 -> 0xE01AE2A8.
+     Calls print_msg("spinlock(addr=0x%08x, value=0x%08x) timeout\n", addr, val);
+     Calls DryOS Panic at 0xE01AE2CC (Module Code = 64, Panic Code = 6).
+     Prints "DRYOS PANIC: Module Code = %d, Panic Code = %d[puId %d]\n" and enters
+     infinite halt loop at 0xE01AE2DC: b.n 0xE01AE2DC.
+
+3. Scheduler Primitives:
+   - 0xE07C8F74 : kernel_unlock() -> Clears scheduler spinlock at 0x00004024.
+   - 0xE07C8B08 : reschedule() / scheduler_yield() -> Evaluates run queue at 0xE07C9072
+     and dispatches context switch at 0xE07C87C8 if a higher priority task is ready.
+   - 0xE07C8E18 : send_reschedule_ipi() -> Emits ARM GIC SGI 10 (GIC_scheduling) via
+     0xE0163C34 to GICD_SGIR with target CPU mask ((1 << other_core) << 16) | 10.
+================================================================================

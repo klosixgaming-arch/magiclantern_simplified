@@ -1,0 +1,45 @@
+================================================================================
+=== CANON EOS R6 FIRMWARE 1.7.0 -- OPTION D: RAW SENSOR & EDMAC REPORT       ===
+================================================================================
+Architecture : Dual-Core Cortex-A53 | DIGIC X | DryOS Kernel
+
+--- [1] LIVEVIEW SENSOR RAW DESCRIPTOR (0x0001EF88 - Mem1Path) ---
+Sensor Raw BPP          : 14 bpp
+Sensor Raw Width        : 1832 px
+Sensor Raw Height       : 1220 px
+Sensor Line Pitch       : 1888 bytes
+Frame Buffer Size       : 2303360 bytes (0x00232580)
+Physical Buffer Address : 0x00000000 (High: 0x00000000)
+Active Sensor Crop      : 0 x 0 (Offset: 1832, 1220)
+
+Raw 64-Byte Descriptor Memory Dump (0x0001EF88):
+  +0x00: 00000000 FFFFFFFF 00000000 00000009
+  +0x10: 0000000E 00000000 00000000 00000760
+  +0x20: 000004E8 00000728 000004C4 00000001
+  +0x30: 00000000 00000000 00000001 00000001
+
+--- [2] LIVEVIEW RAW DUMP CONTROLLER (0x00030278) ---
+Raw 32-Byte Controller State Dump (0x00030278):
+  +0x00: 00000000 00000001 00000000 00000000
+  +0x10: 00000000 FFFFFFFF 00000000 00000000
+
+--- [3] LIVE BAYER RAW PIXEL BUFFER PROBE ---
+Buffer Pointer Status   : PENDING / NOT ALLOCATED (0x00000000)
+Note                    : Sensor pipeline initializes upon entering LiveView recording mode
+
+--- [4] CANON DIGIC X NATIVE RAW HOOK ENTRY POINTS ---
+lv_save_raw             : 0xE015FA34 (Trigger LiveView RAW write latch)
+lv_raw_dump             : 0xE015FB38 (Full raw frame dump to SD card)
+get_lv_raw_buffer       : 0xE0381838 (Returns 64-bit physical address [0x1EFD8])
+get_lv_raw_size         : 0xE038180E (Calculates (w * h * bpp) / 8)
+lv_capraw_dump          : 0xE0160052 (Capture RAW dump)
+lv_raw_100dump          : 0xE015FF7C (Burst 100-frame raw sequence)
+
+--- [5] VIDEO EDMAC HARDWARE ENGINE (0xE1A0BEF8 / 0xE1A0C830) ---
+EDMAC Channel 0 Control : 0xD2406000
+EDMAC Channel 1 Control : 0xD2422000 | Address: 0xD2424000 | Connect: 0xD2425000
+EDMAC Channel 2 Control : 0xD2422100 | Address: 0xD2424040 | Connect: 0xD2425080
+EDMAC Channel 3 Control : 0xD2422200 | Address: 0xD2424080 | Connect: 0xD24250C0
+EDMAC Channel Stride    : 0x100 bytes (Control), 0x40 bytes (Address)
+Status Register Offset  : +0x00B8
+Transfer Size Register  : +0x2800

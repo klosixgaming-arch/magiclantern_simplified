@@ -1,0 +1,132 @@
+================================================================================
+CANON EOS R6 (DIGIC X) — QEMU HARDWARE EMULATION GROUND-TRUTH SPECIFICATION
+================================================================================
+Generated: October 12, 2026
+Verified Against: gang100.bin (0xE0000000), boot00.bin (0xE0100000), Live R6 DRAM
+
+--------------------------------------------------------------------------------
+1. TIMER SUBSYSTEM & GIC ARCHITECTURE (QUERY 1)
+--------------------------------------------------------------------------------
+- CP15 Generic Timers:
+  DryOS firmware DOES NOT USE ARMv8 CP15 Generic Timers (neither CNTP nor CNTV).
+  Disassembly of the full 38.5MB firmware confirmed zero CP15 c14 timer instructions.
+- DryOS Kernel Tick Mechanism:
+  Uses GIC SGI 11 (GIC_timer) for inter-core timer broadcast and GIC SGI 10
+  (GIC_scheduling) for preemptive task context switching.
+  Hardware timekeeping is driven by 24MHz / 1MHz hardware timers and Marius channels.
+
+- CRITICAL CORRECTION FOR GIC IN r6.c:
+  The GIC is NOT located at 0xBF000000!
+  GIC base address is 0xC1000000:
+    * GICC (CPU Interface): Base 0xC1000000
+        - 0xC1000100: GICC_CTLR
+        - 0xC1000104: GICC_PMR
+        - 0xC1000108: GICC_BPR
+        - 0xC100010C: GICC_IAR  (Interrupt Acknowledge, read at 0xE022D478)
+        - 0xC1000110: GICC_EOIR (End of Interrupt, written at 0xE022D4FC)
+    * GICD (Distributor): Base 0xC1001000
+        - 0xC1001000: GICD_CTLR
+        - 0xC1001100: GICD_ISENABLER0
+        - 0xC1001200: GICD_ISENABLER (lines 32..704, read/written at 0xE0142356)
+        - 0xC1001800: GICD_ITARGETSR (CPU target masks, written at 0xE0142390)
+        - 0xC1001C00: GICD_ICFGR (config registers, written at 0xE0142316)
+        - 0xC1001F00: GICD_SGIR (software interrupt trigger)
+
+--------------------------------------------------------------------------------
+2. MARIUS HARDWARE TIMER SPECIFICATION (QUERY 2)
+--------------------------------------------------------------------------------
+- Base Address: 0xC0208000
+- Channel Layout (16 bytes per channel):
+    * Channel 0: 0xC0208890 (Output Compare 0, Marius IRQ 14)
+    * Channel 1: 0xC02088A0 (Output Compare 1, Marius IRQ 30)
+    * Channel 2: 0xC02088B0 (Output Compare 2, Marius IRQ 46)
+    * Channel 3: 0xC02088C0 (Output Compare 3, Marius IRQ 62)
+    * Channel 4: 0xC02088D0 (Output Compare 4, Marius IRQ 78)
+    * Channel 5: 0xC02088E0 (Output Compare 5, Marius IRQ 94)
+    * Channel 6: 0xC02088F0 (Output Compare 6, Marius IRQ 110)
+    * Channel 7: 0xC0208900 (Output Compare 7, Marius IRQ 126)
+
+- Channel Register Offsets:
+    +0x00 (MATCH):   32-bit compare/match period register.
+    +0x04 (CONTROL): Channel control register.
+                     Write 1 (bit 0 = 1): Starts / enables timer channel.
+                     Write 0: Stops / disables timer channel.
+    +0x08 (STATUS):  Interrupt status register.
+                     Bit 0 indicates compare match reached.
+                     Write 1: Clears / acknowledges the status.
+    +0x0C (COUNTER): Read-only running 32-bit free counter.
+
+- Cascaded Interrupt Path:
+    Marius Timer channels route into the Marius Secondary INTC at 0xD231A000.
+    When a Marius timer fires:
+      1. Marius INTC asserts GIC SPI 32 (GIC_MariusIntc).
+      2. CPU dispatcher at 0xE022D470 reads GICC_IAR (0xC100010C) -> returns 32.
+      3. Dispatcher reads secondary interrupt vector from [0xD231A000].
+      4. Dispatcher runs registered handler.
+      5. Dispatcher writes vector number to [0xD231A010] (Marius EOI).
+      6. Dispatcher writes 32 to GICC_EOIR (0xC1000110).
+
+--------------------------------------------------------------------------------
+3. CPU1 BOOT & WFE SEQUENCE (QUERY 3)
+--------------------------------------------------------------------------------
+- Mailbox Address: 0xDFFC4FA0 (located in on-chip SRAM0 at 0xDFFC0000).
+- Core 0 Release Sequence (gang100.bin 0xE000B2DC):
+    add.w r0, r0, #1       ; entry address | 1 (Thumb bit: 0xE0100001)
+    ldr   r1, =0xDFFC4FA0  ; Mailbox vector address
+    str   r0, [r1]         ; Writes entry address to *0xDFFC4FA0
+    dmb   sy               ; Memory barrier
+    bx    r0               ; Core 0 jumps to main entry
+  Core 0 then triggers GIC SGI 12 (GIC_suspend) via GICD_SGIR and executes SEV.
+
+- Core 1 Wakeup Flow (gang100.bin 0xE0004900):
+    0xe000490a: mrc p15, #0, r5, c0, c0, #5  ; Read MPIDR
+    0xe000490e: ands r0, r5, #0xf             ; Core ID (1)
+    0xe0004912: bne  0xe0004924               ; Branch if Core 1
+    0xe0004924: dmb  sy
+    0xe0004928: ldr  r0, =0xDFFC4FA0
+    0xe000492a: ldr  r0, [r0]                 ; Reads *0xDFFC4FA0
+    0xe000492c: bx   r0                       ; Jumps to 0xE0100001!
+
+- Boot00 Flow for Core 1 (boot00.bin 0xE0100000):
+    0xe0100014: mrc p15, #0, r5, c0, c0, #5  ; MPIDR
+    0xe0100018: ands r0, r5, #0xf
+    0xe010001c: bne  0xe0100022               ; Core 1 branches to 0xE0100022
+    0xe0100022: b.w  0xe01000ec               ; Core 1 branches to 0xE01000EC
+    0xe01000ec: Setup SP and call 0xE01003B8 to join active DryOS kernel!
+
+- QEMU CPU1 Synthesis Stub:
+    cpu1_wfe_loop:
+        wfe
+        ldr  r0, =0xDFFC4FA0
+        ldr  r0, [r0]
+        cmp  r0, #0
+        beq  cpu1_wfe_loop
+        bx   r0
+
+--------------------------------------------------------------------------------
+4. EXECUTION MODE & ARCHITECTURE (QUERY 4)
+--------------------------------------------------------------------------------
+- Execution Mode: 100% AArch32 Thumb-2.
+- The firmware NEVER switches to AArch64.
+- SCTLR.TE == 1: Exception vectors (VBAR at 0xE0300980) execute in Thumb mode!
+  All exception handlers (+0x04, +0x08, +0x0C, +0x18, +0x1C) are Thumb-2 instructions.
+- QEMU Configuration: Run dual Cortex-A53 with aarch64=off (or dual Cortex-A9)
+  starting at 0xE0004900 (or 0xE0100001) in Thumb mode.
+
+--------------------------------------------------------------------------------
+5. PRIMARY DEBUG UART CONSOLE (CRITICAL CORRECTION FOR r6.c)
+--------------------------------------------------------------------------------
+- Primary UART0 Base: 0xC0800000 (NOT 0xBF002000 or 0xC0334000).
+- Registers (verified from polling routine at 0xE000B2F0):
+    +0x00 (UART_TX_DATA):  Transmit data FIFO.
+    +0x14 (UART_TX_FLAGS): Status flags. Bit 1 (0x2) indicates TX ready / empty.
+    Canon transmit loop:
+        wait:
+            ldr r4, [0xC0800014]
+            tst.w r4, #2
+            beq wait
+            strb r1, [0xC0800000]
+            str  r5, [0xC0800014]   (sets 0x2 in flags)
+- Baud Clock: 24,000,000 Hz (0x016E3600).
+- Additional channels: UART1 @ 0xC0810000, UART2 @ 0xC0830000.
+================================================================================

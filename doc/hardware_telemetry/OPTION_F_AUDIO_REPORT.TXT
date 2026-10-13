@@ -1,0 +1,70 @@
+================================================================================
+=== CANON EOS R6 FIRMWARE 1.7.0 -- OPTION F: AUDIO SUBSYSTEM & CODEC REPORT  ===
+================================================================================
+Architecture : Dual-Core Cortex-A53 | DIGIC X | DryOS Kernel
+Camera Model : Canon EOS R6 (0x80000453)
+Sampling     : 48 kHz / 24-bit LPCM (Movie) | 48 kHz / 16-bit (Standard)
+Body Serial  : 
+
+--- [1] REVERSE-ENGINEERED DRYOS AUDIO PROPERTY REGISTRY ---
+PROP_ID     PROPERTY_NAME                    DESCRIPTION / DISPATCHER
+0x8003002B  PROP_MIC_PHYSICAL_CONNECT        External 3.5mm Mic Jack Detect (0=Int, 1=Ext)
+0x80030055  PROP_HEADPHONE_PHYSICAL_CONNECT  3.5mm Headphone Jack Detect (0=Unplugged, 1=Plugged)
+0x8003002C  PROP_HDMI_PHYSICAL_CONNECT       HDMI Audio Stream Connect State
+0x80000080  PROP_MOVIE_REC_VOLUME            Movie Audio Recording Gain (0..64 Manual / Auto)
+0x80000081  PROP_MOVIE_REC_VOLUME_LINE       Line Recording Volume Gain
+0x80000082  PROP_MOVIE_SOUND_RECORD          Audio Recording Mode (0=Auto, 1=Manual, 2=Disable)
+0x80000083  PROP_WIND_CUT                    Wind Noise Cut Filter (0=Off, 1=On)
+0x80000084  PROP_ATTENUATOR                  Microphone Attenuator Toggle (0=Off, 1=On)
+0x800000CC  PROP_DUAL_OUTPUT                 Dual Audio Routing Path
+0x80020006  PROP_BUZZER                      Camera Speaker / Buzzer Beep Enable
+
+--- [2] MASTER AUDIO STATE OBJECT IN DRAM (0x00017B54) ---
+Audio Context Pointer [0x00017B54 + 0x00]: 0x03FC01BA
+Audio Signal Pointer  [0x00017B54 + 0x08]: 0x416E9460
+
+--- [3] HARDWARE AUDIO CONTROLLER & CODEC MMIO MAP ---
+REGISTER    NAME / FUNCTION                          CLOCK / POWER DOMAIN
+0xD2710000  AUDIO_CTRL_BASE_0                        Gated by PowerSave (Active in Rec/Play)
+0xD2720000  AUDIO_CTRL_BASE_1                        Audio DSP Main Interface Controller
+0xD2720008  AUDIO_STATUS_REG                         Bit 5/6: Serial Ready / Busy Flag
+0xD272000C  AUDIO_CONFIG_REG                         Sample Clock / Routing Control
+0xD2721064  AUDIO_CLOCK_DIV_REG                      I2S MCLK / BCLK Prescaler
+0xD2722000  AUDIO_SERIAL_COMMAND_REG                 Serial Command Payload Transmit
+0xD2722008  AUDIO_SERIAL_STATUS_REG                  Serial Command Acknowledge Register
+
+--- [4] SOUNDDEV EVENT PROCEDURE DISPATCH TABLE (0xE0522600) ---
+IDX  PROCEDURE_NAME                    NAME_PTR    HANDLER_ADDR
+[00] -33s 0xE0D033AC  0xE0522600
+[01] -33s 0xE0D033C4  0xE0522608
+[02] -33s 0xE0D033DC  0xE0522610
+[03] -33s 0xE0D033F4  0xE0522618
+[04] -33s 0xE0D0340C  0xE0522620
+[05] -33s 0xE0D03424  0xE0522628
+[06] -33s 0xE0D0343C  0xE0522630
+[07] -33s 0xE0D03454  0xE0522638
+[08] -33s 0xE0D0346C  0xE0522640
+[09] -33s 0xE0D03484  0xE0522648
+[10] -33s 0xE0D0349C  0xE0522650
+[11] -33s 0xE0D034B4  0xE0522658
+[12] -33s 0xE0D034CC  0xE0522660
+
+--- [5] ROM AUDIO GAIN & PREAMP CALIBRATION TABLES ---
+MICGAIN Table Base       : 0xE0402480
+MICGAIN Left Channel Adj : 0xE040249C
+MICGAIN Right Channel Adj: 0xE04024BC
+DCCUT DC-Removal Filter  : 0xE0402500 (Coef: 0xE0402510)
+Speaker Gain Table       : 0xE0402954
+Headphone Gain Table     : 0xE0402964
+Beep Output Gain Table   : 0xE0402940
+VAIF Analog Preamp Reg   : 0xE04029B8 (Gain: 20.5 dB / 26.0 dB Front-End)
+SD Calibration File Hook : AUDSig.cfg (0xE0403FBC on A:/ or B:/)
+
+--- [6] AUDIO CODEC SERIAL CONTROL & DMA ENGINE ---
+Serial Command Routine   : AudioICSerialCommand (0xE0404720)
+Serial Send Routine      : AudioICSerialCommand_Send (0xE1048061)
+Serial Wait / Test       : AudioICWaitTest (0xE0404738)
+actrl State Machine Tbl  : 0xE1048090 (Handlers: 0xE03FCA99, 0xE03FF755, 0xE03FCCE8, 0xE03FD1C5)
+DMA Architecture         : ARM PrimeCell PL330 DMA Engine (DMA330_0..DMA330_3)
+EDMAC Streaming Domain   : EDOMAIN_EDMAC Audio FIFO Read/Write Channels
+
