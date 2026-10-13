@@ -97,16 +97,16 @@ void* _alloc_dma_memory(size_t size)
 {
     void* raw = _AllocateMemory(size + 64);
     if (!raw) return NULL;
-    uintptr_t ptr = ((uintptr_t)raw + 32) & ~31;
-    *(void**)(ptr - 4) = raw;
-    return (void*)(ptr | 0x40000000);
+    uintptr_t ptr = ((uintptr_t)raw + sizeof(void*) + 31) & ~31;
+    *(void**)(ptr - sizeof(void*)) = raw;
+    return (void*)ptr;
 }
 
 void _free_dma_memory(void* ptr)
 {
     if (!ptr) return;
-    uintptr_t p = ((uintptr_t)ptr) & ~0x40000000;
-    void* raw = *(void**)(p - 4);
+    uintptr_t p = (uintptr_t)ptr;
+    void* raw = *(void**)(p - sizeof(void*));
     _FreeMemory(raw);
 }
 
@@ -118,8 +118,8 @@ int get_task_info_by_id(int unknown_flag, int task_id, void *task_attr)
 extern int _FIO_GetFileSize64(const char *, void *);
 int _FIO_GetFileSize(const char * filename, uint32_t * size)
 {
-    uint32_t size64[2];
+    uint64_t size64 = 0;
     int code = _FIO_GetFileSize64(filename, &size64);
-    *size = size64[0];
+    *size = (uint32_t)size64;
     return code;
 }

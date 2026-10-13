@@ -52,7 +52,7 @@ GUI & Events,PlayMain_handler,0xE075099E,THUMB_FN,Playback mode event handler,Pl
 GUI & Events,ShootOlcApp_handler,0xE09EFDA2,THUMB_FN,Shooting / LiveView top event handler,StartShootOlcApp
 Memory Allocation,_AllocateMemory,0xE07DCB1C,THUMB_FN,Allocate heap memory block,Allocates from DryOS kernel heap
 Memory Allocation,_FreeMemory,0xE07DCCD4,THUMB_FN,Free heap memory block,Paired with _AllocateMemory
-Memory Allocation,GetMemoryInformation,0xE07DC982,THUMB_FN,Query heap total / free memory bytes,Memory diagnostic function
+Memory Allocation,GetMemoryInformation,0xE07DC9A6,THUMB_FN,Query heap total / free memory bytes,Memory diagnostic function
 Memory Allocation,GetSizeOfMaxRegion,0xE07DC97A,THUMB_FN,Query largest contiguous free block,Memory diagnostic function
 Memory Allocation,AllocateMemoryResource,0xE09E2B4E,THUMB_FN,Allocate high-level memory resource,Resource manager
 Memory Allocation,AllocateContinuousMemoryResource,0xE09E2B82,THUMB_FN,Allocate physically contiguous memory,Resource manager DMA buffer

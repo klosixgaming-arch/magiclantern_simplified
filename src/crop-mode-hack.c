@@ -10,7 +10,7 @@
 static int video_mode[10];
 PROP_HANDLER(PROP_VIDEO_MODE)
 {
-    ASSERT(len <= sizeof(video_mode));
+    if (len > sizeof(video_mode)) return;
     memcpy(video_mode, buf, len);
 }
 

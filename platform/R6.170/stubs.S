@@ -145,7 +145,7 @@ THUMB_FN(0xE07BCEE6,  FIO_SeekSkipFile)                     // Storage::Storage.
 /** Memory allocation **/
 THUMB_FN(0xE07DCB1C, _AllocateMemory)                       // NG AllocateMemory
 THUMB_FN(0xE07DCCD4, _FreeMemory)                           // uses the same heap
-THUMB_FN(0xE07DC982,  GetMemoryInformation)                 // called from _AllocateMemory()
+THUMB_FN(0xE07DC9A6,  GetMemoryInformation)                 // called from _AllocateMemory() (2-arg wrapper at 0xE07DC9A6)
 THUMB_FN(0xE07DC97A,  GetSizeOfMaxRegion)                   // called from _AllocateMemory()
 
 /** Memory suites & resources **/

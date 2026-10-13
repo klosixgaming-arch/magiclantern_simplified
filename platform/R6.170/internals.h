@@ -20,8 +20,8 @@
 /* has LV */
 #define CONFIG_LIVEVIEW
 
-/* enable state objects hooks */
-#define CONFIG_STATE_OBJECT_HOOKS
+/* disable legacy state objects hooks on DIGIC X */
+//#define CONFIG_STATE_OBJECT_HOOKS
 
 #define CONFIG_TASK_STRUCT_V2_SMP
 #define CONFIG_TASK_ATTR_STRUCT_V5

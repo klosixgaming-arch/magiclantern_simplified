@@ -1401,7 +1401,6 @@ void menu_add_internal(
     }
 
     // create submenus
-
     struct menu_entry * entry = head;
     for (int i = 0; i < count0; i++)
     {
@@ -1435,7 +1434,7 @@ void menu_add_internal(
                 entry->children->parent = entry;
                 entry->children->depends_on |= entry->depends_on;
                 entry->children->works_best_in |= entry->works_best_in;
-                printf("updating %s -> %s\n", entry->name, entry->children->name);
+                // printf("updating %s -> %s\n", entry->name, entry->children->name);
             }
         }
         entry = entry->prev;
@@ -4903,6 +4902,9 @@ void menu_benchmark()
 
 static int menu_ensure_canon_dialog()
 {
+#if defined(CONFIG_DIGIC_X) || defined(FEATURE_VRAM_RGBA)
+    return 1;
+#else
 #ifndef CONFIG_VXWORKS
     if (CURRENT_GUI_MODE != GUIMODE_ML_MENU && CURRENT_GUI_MODE != GUIMODE_PLAY)
     {
@@ -4926,6 +4928,7 @@ static int menu_ensure_canon_dialog()
 
 #endif
     return 1;
+#endif
 }
 
 static struct msg_queue *menu_redraw_queue = 0;
@@ -5621,6 +5624,9 @@ static void start_redraw_flood()
 
 static void piggyback_canon_menu()
 {
+#if defined(CONFIG_DIGIC_X) || defined(FEATURE_VRAM_RGBA)
+    return;
+#else
 #ifdef GUIMODE_ML_MENU
     int new_gui_mode = GUIMODE_ML_MENU;
     if (!new_gui_mode) return;
@@ -5635,10 +5641,14 @@ static void piggyback_canon_menu()
         // bmp will be enabled after first redraw
     }
 #endif
+#endif
 }
 
 static void close_canon_menu()
 {
+#if defined(CONFIG_DIGIC_X) || defined(FEATURE_VRAM_RGBA)
+    return;
+#else
 #ifdef GUIMODE_ML_MENU
     if (CURRENT_GUI_MODE == 0) return;
     if (sensor_cleaning) return;
@@ -5653,6 +5663,7 @@ static void close_canon_menu()
     if (DISPLAY_IS_ON && !HALFSHUTTER_PRESSED) 
         fake_simple_button(BGMT_MENU);
     msleep(50);
+#endif
 #endif
 }
 

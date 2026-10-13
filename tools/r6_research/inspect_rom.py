@@ -1,23 +1,19 @@
-import struct
+import os, re
 
-with open("/mnt/c/Users/Mega/Downloads/gang100.bin", "rb") as f:
-    rom = f.read()
-
-base = 0xE0000000
-target = struct.pack("<I", 0x14B000)
-pos = 0
-while True:
-    idx = rom.find(target, pos)
-    if idx == -1:
-        break
-    print("Found 0x14B000 at ROM addr: 0x{:08X}".format(base + idx))
-    pos = idx + 4
-
-target2 = struct.pack("<I", 0x18384)
-pos = 0
-while True:
-    idx = rom.find(target2, pos)
-    if idx == -1:
-        break
-    print("Found 0x18384 at ROM addr: 0x{:08X}".format(base + idx))
-    pos = idx + 4
+ml_src = "/mnt/c/Users/Mega/Downloads/magiclantern_simplified/src"
+for root, dirs, files in os.walk(ml_src):
+    for fn in files:
+        if fn.endswith(".c"):
+            p = os.path.join(root, fn)
+            with open(p, "r", errors="ignore") as f:
+                content = f.read()
+            if "PROP_HANDLER" in content and "ASSERT" in content:
+                print(f"File {fn}:")
+                # find functions with PROP_HANDLER that contain ASSERT
+                funcs = re.findall(r'PROP_HANDLER\s*\(\s*([^\)]+)\s*\)\s*\{([^}]+)\}', content, re.DOTALL)
+                for prop, body in funcs:
+                    if "ASSERT" in body:
+                        print(f"   PROP_HANDLER({prop.strip()}):")
+                        for line in body.splitlines():
+                            if "ASSERT" in line:
+                                print(f"      {line.strip()}")

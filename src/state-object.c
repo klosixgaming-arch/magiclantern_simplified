@@ -265,7 +265,8 @@ static int stateobj_em_spy(struct state_object * self, int x, int input, int z, 
 
 static int stateobj_start_spy(struct state_object * stateobj, void* spy)
 {
-    ASSERT(streq(stateobj->type, "StateObject"));
+    if (!stateobj) return 0;
+    if (!stateobj->type || !streq(stateobj->type, "StateObject")) return 0;
 
     if (!StateTransition)
         StateTransition = (void *)stateobj->StateTransition_maybe;

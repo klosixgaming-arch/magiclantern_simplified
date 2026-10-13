@@ -530,4 +530,60 @@ Secondary core startup follows a hardware WFE/mailbox handshake:
 * **Message Print Helper:** `0xE04BF000` (Used by panic handlers; signature: `r0 = fmt`, `r1..r3 = args`, printf-compatible).
 * **Lock Test / Yield Primitives:** `0xE07C8B08` and `0xE07C8E18` (Invoked by synchronization helper `0xE07C8F74`).
 
+---
+
+## 14. Full Magic Lantern Execution & Milestone 6 Verification
+
+Through systematic diagnostic LED burst signaling on real hardware (strictly adhering to the user constraint of ≤ 6 blinks per burst):
+* **Milestone 1 (1 blink):** `_mem_init()`, `_find_ml_card()`, and `REQUIRE.SET` verification.
+* **Milestone 2 (2 blinks):** `_load_fonts()`, `_ml_cbr_init()`, `menu_init()`, `debug_init()`.
+* **Milestone 3 (3 blinks):** First 12 init functions executed cleanly.
+* **Milestone 4 (4 blinks):** All 24 init functions completed successfully (including `state_init` after defensive guard patch).
+* **Milestone 5 (5 blinks):** `config_load()` executed, configuration mutexes and startup hold locks released.
+* **Milestone 6 (6 blinks):** All 17 background tasks spawned via `task_create()` loop; `ml_started = 1` achieved on real hardware without crashes.
+
+---
+
+## 15. Root Cause Resolution: TRASH Menu Freeze & Sticky Reboot Bug
+
+### 15.1 Legacy GUI Mode Request Trap (`0xC048`)
+* In `platform/R6.170/consts.h`, `GUIMODE_ML_MENU` was previously defined as `(lv ? 0xC048 : GUIMODE_MENU)`.
+* On DIGIC 5/6, mode `0xC048` opened a blank dialog to mask Canon overlays. On DIGIC X (EOS R6), requesting mode `0xC048` via `SetGUIRequestMode()` sends an illegal mode command to Canon's `GuiMainTask`, triggering an internal state machine deadlock and Err70 panic.
+* **Resolution:** Set `#define GUIMODE_ML_MENU 0`. Bypassed `piggyback_canon_menu()` and `close_canon_menu()` on DIGIC X. ML renders directly onto Compositor Layer 0 over LiveView without disturbing native camera state.
+
+### 15.2 Winsys Semaphore Deadlock (`0x183B8`)
+* In `src/bmp.c:refresh_yuv_from_rgb()`, the compositor refresh routine invoked:
+  ```c
+  take_semaphore(winsys_sem, 0); // timeout 0 = wait forever
+  XimrExe((void *)XIMR_CONTEXT);
+  give_semaphore(winsys_sem);
+  ```
+* ROM analysis of `boot00.bin` proved that address `0x183B8` is never referenced as a semaphore in EOS R6 firmware. Taking this uninitialized/invalid semaphore with timeout 0 permanently deadlocked `refresh_yuv_from_rgb_task`.
+* **Resolution:** Removed the `winsys_sem` lock and `XimrExe` call on DIGIC X.
+
+### 15.3 Hardware Display Compositor Cache Maintenance
+* DIGIC X hardware display controller DMA reads display surfaces directly from DRAM.
+* When CPU writes RGB pixels to the Layer 0 MARV buffer (`0x14B000` / `0x18384`, base `0x22788900`, 2048x1080 stride), the data resides in Cortex-A53 L1/L2 write-back cache.
+* Without calling `clean_dcache_range()`, the display hardware DMA reads uninitialized DRAM, causing the screen to remain blank.
+* **Resolution:** Implemented per-row D-cache flushing using `clean_dcache_range()` on all modified scanlines in `refresh_yuv_from_rgb()` and `rgba_buffer_clear()`.
+
+### 15.4 Persistent Module Crash Lockfile (`LOADING.LCK`)
+* When the camera froze from the above issues, `D:\ML\modules\LOADING.LCK` remained locked on the SD card.
+* On every subsequent boot, `src/module.c` detected `LOADING.LCK` and called `NotifyBox()` after 1 second, which invoked `redraw()` -> `refresh_yuv_from_rgb()` -> `take_semaphore(winsys_sem, 0)`, creating a "sticky" 1-2 second reboot freeze loop.
+* **Resolution:** Added `FIO_RemoveFile(module_lockfile)` upon crash detection in `module.c` and wiped `LOADING.LCK` from the SD card.
+
+---
+
+## 16. Current Operational State & Next Agent Roadmap
+
+1. **Firmware State:**
+   * Boot sequence reaches **Milestone 6** reliably (`1. 2. 3. 4. 5. 6. no freeze`).
+   * Pressing the **TRASH** button no longer freezes the camera.
+2. **Current Challenge:**
+   * The ML menu does not yet render visually onto the LCD screen when TRASH is pressed.
+3. **Primary Diagnosis for Next Agent:**
+   * **Button Routing:** Determine whether `SwTrash_Button` (0x14) is routed through Canon's `GuiMainTask` message queue (`gui_main_struct.msg_queue_eosr`) during LiveView, or whether ML must intercept TRASH directly via the hardware ring buffer (`0x00135800`), as successfully implemented in `hello_world()`.
+   * **Compositor Target Surface:** Verify whether Layer 0 MARV at `*(0x14B000)` / `*(0x18384)` is actively selected as the front overlay surface in LiveView, or if an alternate compositor layer (e.g., Layer 2 or dedicated ML layer via `XCM_SetSourceSurface`) is required.
+
+
 

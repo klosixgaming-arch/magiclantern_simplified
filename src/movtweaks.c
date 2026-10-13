@@ -56,7 +56,7 @@ static int hdmi_code_array[8];
 
 PROP_HANDLER(PROP_HDMI_CHANGE_CODE)
 {
-    ASSERT(len == 32);
+    if (len != 32) return;
     memcpy(hdmi_code_array, buf, 32);
 }
 

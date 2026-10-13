@@ -191,11 +191,34 @@ void bmp_idle_copy(int direction, int fullsize)
 // but this struct is not yet determined for 200D
 extern int XimrExe(void *);
 extern struct semaphore *winsys_sem;
+
+static inline void clean_dcache_range(void *start, uint32_t size)
+{
+    uint32_t addr = (uint32_t)start & ~31;
+    uint32_t end = (uint32_t)start + size;
+    asm volatile("dsb sy" ::: "memory");
+    for (; addr < end; addr += 32)
+    {
+        asm volatile("mcr p15, 0, %0, c7, c10, 1" : : "r" (addr));
+    }
+    asm volatile("dsb sy" ::: "memory");
+}
+
 void refresh_yuv_from_rgb(void)
 {
     // get our indexed buffer, convert into our real rgb buffer
     uint8_t *b = bmp_vram_indexed;
     uint32_t *rgb_data = NULL;
+
+    if (rgb_vram_info == NULL || rgb_vram_info->bitmap_data == NULL)
+    {
+        struct MARV *m = *(struct MARV **)0x14B000;
+        if (!m || m->signature != 0x5652414D) m = *(struct MARV **)0x18384;
+        if (m && m->signature == 0x5652414D && m->bitmap_data)
+        {
+            rgb_vram_info = m;
+        }
+    }
 
     if (rgb_vram_info != NULL)
     {
@@ -218,13 +241,10 @@ void refresh_yuv_from_rgb(void)
     else{
 #endif
 #if defined(CONFIG_DIGIC_X) && !defined(CONFIG_COMPOSITOR_DEDICATED_LAYER)
-        // kitor FIXME this is the loop altered to work with 2048x1080 layers.
-        // Resolution needs confirmation on R6.
-        //
-        // I think this could be used as general solution?
-        // Shall we use per-camera constants in bmp.c? Or maybe get this at runtime
-        // from Ximr / XCM?
+        uint32_t stride = (rgb_vram_info->width >= 1024) ? rgb_vram_info->width : 2048;
         uint32_t *rgb_row = rgb_data;
+        extern int gui_menu_shown(void);
+        int menu_is_on = gui_menu_shown();
         for (uint y = 0; y < BMP_H_PLUS - BMP_H_MINUS; y++ )
         {
             rgb_data = rgb_row;
@@ -232,12 +252,20 @@ void refresh_yuv_from_rgb(void)
             {
                 uint32_t rgb = indexed2rgb(*b);
                 if ((rgb & 0xff000000) == 0x00000000)
-                    rgb_data++;
+                {
+                    if (menu_is_on)
+                        *rgb_data++ = 0x00000000;
+                    else
+                        rgb_data++;
+                }
                 else
+                {
                     *rgb_data++ = rgb;
+                }
                 b++;
             }
-            rgb_row = rgb_row + BMP_LAYER_WIDTH;
+            clean_dcache_range(rgb_row, BMPPITCH * sizeof(uint32_t));
+            rgb_row = rgb_row + stride;
         }
 #else
         //SJE FIXME benchmark this loop, it probably wants optimising
@@ -259,12 +287,16 @@ void refresh_yuv_from_rgb(void)
 #endif
 
     // trigger Ximr to render to OSD from RGB buffer
-#ifdef CONFIG_DIGIC_VI
+#if defined(CONFIG_DIGIC_X)
+    // On DIGIC X, Layer 0 is composited directly by hardware from DRAM.
+    // D-cache was cleaned per row above. Do not call take_semaphore(winsys_sem, 0)
+    // or XimrExe, as winsys_sem is an invalid pointer and timeout 0 deadlocks.
+#elif defined(CONFIG_DIGIC_VI)
     XimrExe((void *)XIMR_CONTEXT);
 #else
     if (XCM_PTR && winsys_sem)
     {
-        take_semaphore(winsys_sem, 0);
+        take_semaphore(winsys_sem, 20);
         XimrExe((void *)XIMR_CONTEXT);
         give_semaphore(winsys_sem);
     }
@@ -274,8 +306,28 @@ void refresh_yuv_from_rgb(void)
 
 void rgba_buffer_clear()
 {
-    if (rgb_vram_info == NULL) return;
+    if (rgb_vram_info == NULL || rgb_vram_info->bitmap_data == NULL)
+    {
+        struct MARV *m = *(struct MARV **)0x14B000;
+        if (!m || m->signature != 0x5652414D) m = *(struct MARV **)0x18384;
+        if (m && m->signature == 0x5652414D && m->bitmap_data)
+        {
+            rgb_vram_info = m;
+        }
+    }
+    if (rgb_vram_info == NULL || rgb_vram_info->bitmap_data == NULL) return;
+
+#if defined(CONFIG_DIGIC_X)
+    uint32_t *row = (uint32_t *)rgb_vram_info->bitmap_data;
+    uint32_t stride = (rgb_vram_info->width >= 1024) ? rgb_vram_info->width : 2048;
+    for (uint32_t y = 0; y < (BMP_H_PLUS - BMP_H_MINUS); y++)
+    {
+        memset(&row[y * stride], 0, BMPPITCH * sizeof(uint32_t));
+        clean_dcache_range(&row[y * stride], BMPPITCH * sizeof(uint32_t));
+    }
+#else
     bzero32(rgb_vram_info->bitmap_data, BMP_VRAM_SIZE*4);
+#endif
 }
 
 #if defined(CONFIG_INSTALLER)
@@ -493,7 +545,12 @@ big_bmp_printf(
 
 int bmp_string_width(int fontspec, const char* str)
 {
-    return rbf_str_width((void*)font_dynamic[FONT_ID(fontspec)].bitmap, str);
+    if (!str) return 0;
+    int fid = FONT_ID(fontspec);
+    if (fid > MAX_DYN_FONTS) return 0;
+    void *bm = (void*)font_dynamic[fid].bitmap;
+    if (!bm) return 0;
+    return rbf_str_width(bm, str);
 }
 
 int bmp_strlen_clipped(int fontspec, const char* str, int maxwidth)

@@ -161,6 +161,11 @@ my_task_dispatch_hook(
     }
 }
 
+extern void dbg_blink(int n);
+
+int current_init_func_idx = 0;
+const char * current_init_func_name = "";
+
 /** Call all of the init functions  */
 static void
 call_init_funcs()
@@ -169,20 +174,24 @@ call_init_funcs()
     extern struct task_create _init_funcs_end[];
     struct task_create * init_func = _init_funcs_start;
 
+    int idx = 0;
     for( ; init_func < _init_funcs_end ; init_func++ )
     {
 #if defined(POSITION_INDEPENDENT)
         init_func->entry = PIC_RESOLVE(init_func->entry);
         init_func->name = PIC_RESOLVE(init_func->name);
 #endif
-        DebugMsg( DM_MAGIC, 3,
-            "Calling init_func %s (%x)",
-            init_func->name,
-            (uint32_t) init_func->entry
-        );
+        current_init_func_idx = idx + 1;
+        current_init_func_name = init_func->name ? init_func->name : "unknown";
         thunk entry = (thunk) init_func->entry;
         entry();
+        idx++;
+        if (idx == 12)
+        {
+            dbg_blink(3); // Milestone 3: first 12 init functions completed
+        }
     }
+    dbg_blink(4); // Milestone 4: all 24 init functions completed
 }
 
 static void nop( void ) { }
@@ -2299,31 +2308,31 @@ static void led_fade(int arg1, void * on)
 /* This runs ML initialization routines and starts user tasks.
  * Unlike init_task, from here we can do file I/O and others.
  */
-static void dbg_blink(int n)
+void dbg_blink(int n)
 {
 #if defined(CARD_LED_ADDRESS) && defined(LEDON) && defined(LEDOFF)
     for (int k = 0; k < n; k++)
     {
         *(volatile uint32_t *)CARD_LED_ADDRESS = LEDON;
-        for (volatile int j = 0; j < 400000; j++);
+        for (volatile int j = 0; j < 12500000; j++);
         *(volatile uint32_t *)CARD_LED_ADDRESS = LEDOFF;
-        for (volatile int j = 0; j < 400000; j++);
+        for (volatile int j = 0; j < 12500000; j++);
+        msleep(10);
     }
-    for (volatile int j = 0; j < 1500000; j++);
+    msleep(20);
+    for (volatile int j = 0; j < 30000000; j++);
 #endif
 }
 
 static void my_big_init_task()
 {
-    dbg_blink(1);   /* 1: ml_init task started */
     _mem_init();
-    dbg_blink(7);   /* 7: _mem_init passed */
     _find_ml_card();
-    dbg_blink(2);   /* 2: _find_ml_card passed */
 
-    /* should we require SET for loading ML, or not? */
     extern int _set_at_startup;
     _set_at_startup = config_flag_file_setting_load("ML/SETTINGS/REQUIRE.SET");
+
+    dbg_blink(1); // Milestone 1: Memory, card, and startup config initialized
 
     // at this point, gui_main_task should be started and should be able to tell whether SET was pressed at startup
     if (magic_off_request != _set_at_startup)
@@ -2348,6 +2357,7 @@ static void my_big_init_task()
         /* some very basic feedback - fade out the SD led */
         SetHPTimerAfterNow(1000, led_fade, led_fade, 0);
 
+        dbg_blink(2);  /* magic_off bypassed ML load */
         /* do not continue loading ML */
         return;
     }
@@ -2358,9 +2368,7 @@ static void my_big_init_task()
         qprintf("Error from apply_normal_patches: %d\n", err);
 #endif
 
-    dbg_blink(3);   /* 3: before _load_fonts() */
     _load_fonts();
-    dbg_blink(4);   /* 4: after _load_fonts() */
 
     // SJE not sure on best place to do this.  Before HELLO_WORLD is nice
     // if possible, needs to be after DryOS inits task scheduler.  I assume
@@ -2386,13 +2394,12 @@ static void my_big_init_task()
 #endif
 
     call("DisablePowerSave");
-    dbg_blink(5);   /* 5: after DisablePowerSave */
     _ml_cbr_init();
     menu_init();
     debug_init();
-    dbg_blink(6);   /* 6: after menu_init/debug_init */
-    call_init_funcs(); // among other things, this initialises modules
-    dbg_blink(8);   /* 8: after call_init_funcs */
+    dbg_blink(2); // Milestone 2: Menus & GUI subsystem ready
+
+    call_init_funcs(); // Milestone 3 (func 12) and Milestone 4 (func 24) are inside
     msleep(200); // leave some time for property handlers to run
 
 #ifdef CONFIG_XF605
@@ -2415,6 +2422,7 @@ static void my_big_init_task()
     #endif
 
     _hold_your_horses = 0; // config read, other overriden tasks may start doing their job
+    dbg_blink(5); // Milestone 5: Config loaded and locks released
 
     // Create all of our auto-create tasks, defined via TASK_CREATE()
     extern struct task_create _tasks_start[];
@@ -2445,6 +2453,7 @@ static void my_big_init_task()
 #endif
 
     ml_started = 1;
+    dbg_blink(6); // Milestone 6: All tasks started, ML is fully LIVE!
 }
 
 /** Blocks execution until config is read */
@@ -2497,21 +2506,64 @@ static int my_assert_handler(char* msg, char* file, int line, int arg4)
 
 void ml_assert_handler(char* msg, char* file, int line, const char* func)
 {
+    extern int current_init_func_idx;
+    extern const char * current_init_func_name;
+
+    int file_code = 6;
+    if (file) {
+        if (strstr(file, "lens")) file_code = 1;
+        else if (strstr(file, "shoot")) file_code = 2;
+        else if (strstr(file, "property")) file_code = 3;
+        else if (strstr(file, "menu")) file_code = 4;
+        else if (strstr(file, "fps") || strstr(file, "crop")) file_code = 5;
+        else if (strstr(file, "movtweak") || strstr(file, "cbr")) file_code = 6;
+    }
+
+    int func_group = (current_init_func_idx > 0 && current_init_func_idx <= 24) ? ((current_init_func_idx - 1) / 6 + 1) : 6;
+    int func_index = (current_init_func_idx > 0 && current_init_func_idx <= 24) ? ((current_init_func_idx - 1) % 6 + 1) : 6;
+
     int len = snprintf(assert_msg, sizeof(assert_msg), 
         "ML ASSERT:\n%s\n"
         "at %s:%d (%s), task %s\n"
+        "init_func: %d (%s)\n"
         "lv:%d mode:%d\n\n", 
-        msg, 
-        file, line, func, get_current_task_name(), 
+        msg ? msg : "none", 
+        file ? file : "unknown", line, func ? func : "unknown", get_current_task_name(), 
+        current_init_func_idx, current_init_func_name ? current_init_func_name : "none",
         lv, shooting_mode
     );
-// SJE FIXME: assert handling is buggy on modern Digic.
-// Disable some of it here and do quick hack output:
-#ifdef CONFIG_DIGIC_678X
-    uart_printf("[SJE] ml_assert_msg: %s", assert_msg);
-#endif
-    backtrace_getstr(assert_msg + len, sizeof(assert_msg) - len);
-    request_crash_log(2);
+
+    // 1. Try saving to SD card across all drive conventions
+    const char *targets[] = {
+        "ASSERT.TXT",
+        "A:/ASSERT.TXT",
+        "B:/ASSERT.TXT"
+    };
+    for (int t = 0; t < 3; t++)
+    {
+        FIO_RemoveFile(targets[t]);
+        FILE* f = FIO_CreateFile(targets[t]);
+        if (f)
+        {
+            FIO_WriteFile(f, assert_msg, len);
+            FIO_CloseFile(f);
+            break;
+        }
+    }
+
+
+    // 3. Diagnostic loop: 6 blinks (Assert) -> File (1-6) -> Group (1-4) -> Index (1-6)
+    while (1)
+    {
+        dbg_blink(6);
+        msleep(400);
+        dbg_blink(file_code);
+        msleep(400);
+        dbg_blink(func_group);
+        msleep(400);
+        dbg_blink(func_index);
+        msleep(1500);
+    }
 }
 
 void ml_crash_message(char* msg)

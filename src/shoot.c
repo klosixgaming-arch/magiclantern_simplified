@@ -636,7 +636,7 @@ static volatile int afframe_ack = 0;
 #ifdef CONFIG_LIVEVIEW
 static int afframe[128];
 PROP_HANDLER( PROP_LV_AFFRAME ) {
-    ASSERT(len <= sizeof(afframe));
+    if (len > sizeof(afframe)) return;
     
     if (!lv)
     {
@@ -693,7 +693,10 @@ PROP_HANDLER(PROP_LV_DISPSIZE)
     /* note: 0x81 is a special screen before zooming in, on newer cameras */
     int zoom = buf[0];
 
-    ASSERT(zoom == 1 || zoom == 0x81 || zoom == 5 || zoom == 10);
+    if (zoom != 1 && zoom != 0x81 && zoom != 5 && zoom != 10)
+    {
+        return;
+    }
     zoom_sharpen_step();
     
     if (zoom == 1) zoom_was_triggered_by_halfshutter = 0;

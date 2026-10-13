@@ -2173,6 +2173,7 @@ static void module_load_task(void* unused)
         if(!module_ignore_crashes && FIO_GetFileSize( module_lockfile, &size ) == 0 )
         {
             /* uh, it seems the camera didnt shut down cleanly, skip module loading this time */
+            FIO_RemoveFile(module_lockfile);
             msleep(1000);
             NotifyBox(10000, "Camera was not shut down cleanly.\r\nSkipping module loading." );
         }

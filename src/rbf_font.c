@@ -26,6 +26,7 @@ static int RBF_HDR_MAGIC2 = 0x00000003;
 struct font font_dynamic[MAX_DYN_FONTS+1];
 static char *dyn_font_name[MAX_DYN_FONTS+1];
 uint32_t dyn_fonts = 0;
+static int fonts_loaded = 0;
 
 #ifdef CONFIG_NO_BFNT
 /* kitor: Those replace entries in platform consts.h for DIGIC6+
@@ -67,8 +68,10 @@ uint32_t font_by_name(char *file, uint32_t fg_color, uint32_t bg_color)
     /* too many fonts loaded, return default font */
     if(dyn_fonts >= MAX_DYN_FONTS)
     {
-        beep();
-        bmp_printf(FONT_CANON, 0, 0, "Too many fonts");
+        if (fonts_loaded) {
+            beep();
+            bmp_printf(FONT_CANON, 0, 0, "Too many fonts");
+        }
         return FONT_CANON;
     }
     
@@ -80,8 +83,10 @@ uint32_t font_by_name(char *file, uint32_t fg_color, uint32_t bg_color)
     if((FIO_GetFileSize( filename, &size ) != 0) || (size == 0))
     {
         /* failed to load, return default font */
-        beep();
-        bmp_printf(FONT_CANON, 0, 0, "%s not found", file);
+        if (fonts_loaded) {
+            beep();
+            bmp_printf(FONT_CANON, 0, 0, "%s not found", file);
+        }
         return FONT_CANON;
     }
     
@@ -90,7 +95,9 @@ uint32_t font_by_name(char *file, uint32_t fg_color, uint32_t bg_color)
     /* load the font here */
     if(!rbf_font_load(filename, font, 0))
     {
-        bmp_printf(FONT_CANON, 0, 0, "%s not loaded", file);
+        if (fonts_loaded) {
+            bmp_printf(FONT_CANON, 0, 0, "%s not loaded", file);
+        }
         free(font);
         return FONT_CANON;
     }
@@ -229,11 +236,13 @@ static inline int rbf_font_height(font *rbf_font) {
 }
 //-------------------------------------------------------------------
 static inline int rbf_char_width(font *rbf_font, int ch) {
-    return rbf_font->wTable[ch];
+    if (!rbf_font) return 0;
+    return rbf_font->wTable[(unsigned char)ch];
 }
 
 //-------------------------------------------------------------------
 int rbf_str_width(font *rbf_font, const char *str) {
+    if (!rbf_font || !str) return 0;
     int l=0;
     int maxl = 0;
 
@@ -637,10 +646,8 @@ static int bfnt_load_from_card()
 void _load_fonts()
 {
     /* tolerate multiple calls, but only run the first */
-    static int fonts_loaded = 0;
     if (fonts_loaded)
         return;
-    fonts_loaded = 1;
 
     int bfnt_status = -1;
 
@@ -667,15 +674,22 @@ void _load_fonts()
         bfnt_status = 0;
     #endif
 
-    /* fake font for Canon BFNT font backend, with the same metrics */
-    font *canon_font = new_font();
-    canon_font->hdr.height = 40;
-    for (int i = 0; i < 256; i++)
-        canon_font->wTable[i] = bfnt_char_get_width(i);
+    font *canon_font = NULL;
+    if (bfnt_status == 0)
+    {
+        /* fake font for Canon BFNT font backend, with the same metrics */
+        canon_font = new_font();
+        if (canon_font) {
+            canon_font->hdr.height = 40;
+            for (int i = 0; i < 256; i++)
+                canon_font->wTable[i] = bfnt_char_get_width(i);
+        }
+    }
 
     /* Try to load some RBF fonts */
     font_by_name("term12", COLOR_BLACK, COLOR_WHITE);
     font_by_name("term20", COLOR_BLACK, COLOR_WHITE);
+
     #ifdef CONFIG_LOW_RESOLUTION_DISPLAY
     font_by_name("arghlf22", COLOR_BLACK, COLOR_WHITE);
     #else
@@ -684,7 +698,7 @@ void _load_fonts()
     font_by_name("argnor28", COLOR_BLACK, COLOR_WHITE);
     font_by_name("argnor32", COLOR_BLACK, COLOR_WHITE);
 
-    if (bfnt_status == 0) {
+    if (bfnt_status == 0 && canon_font) {
         /* use BFNT font as fallback */
         for (int i = dyn_fonts; i <= MAX_DYN_FONTS; i++)
         {
@@ -712,4 +726,6 @@ void _load_fonts()
     font_med = *fontspec_font(FONT_MED);
     font_med_large = *fontspec_font(FONT_MED_LARGE);
     font_large = *fontspec_font(FONT_LARGE);
+
+    fonts_loaded = 1;
 }

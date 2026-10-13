@@ -1360,7 +1360,10 @@ PROP_HANDLER( PROP_MVR_REC_START )
 //confirmed R, RP, M50
 PROP_HANDLER( PROP_LENS_STATIC_DATA )
 {
-    ASSERT(len == sizeof(struct prop_lens_static_data));
+    if (len < sizeof(struct prop_lens_static_data))
+    {
+        return;
+    }
 
     const struct prop_lens_static_data * _static = (void*) buf;
     strncpy( lens_info.name, _static->lens_name, sizeof(lens_info.name) );
@@ -1730,12 +1733,15 @@ PROP_HANDLER( PROP_WB_KELVIN_LV )
 static uint16_t custom_wb_gains[128];
 PROP_HANDLER(PROP_CUSTOM_WB)
 {
-    ASSERT(len <= sizeof(custom_wb_gains));
+    if (len > sizeof(custom_wb_gains)) return;
     memcpy(custom_wb_gains, buf, len);
     const uint16_t * gains = (uint16_t *) buf;
-    lens_info.WBGain_R = gains[16];
-    lens_info.WBGain_G = gains[18];
-    lens_info.WBGain_B = gains[19];
+    if (len >= 20 * sizeof(uint16_t))
+    {
+        lens_info.WBGain_R = gains[16];
+        lens_info.WBGain_G = gains[18];
+        lens_info.WBGain_B = gains[19];
+    }
 }
 #endif
 

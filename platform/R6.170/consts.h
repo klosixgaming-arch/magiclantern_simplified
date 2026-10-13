@@ -18,7 +18,7 @@
 // Used for copying and modifying ROM code before transferring control.
 #define FIRMWARE_ENTRY_LEN 0x800
 
-#define MALLOC_STRUCT_ADDR          0xFCE00
+#define MALLOC_STRUCT_ADDR          0xFCE24
 
 #define CURRENT_GUI_MODE            (*(int*)0x8D70)      // from SetGUIRequestMode in 1.7.0 (base 0x8D00 + 0x70)
 
@@ -27,7 +27,7 @@
 
 #define GUIMODE_PLAY 0x2002
 #define GUIMODE_MENU 0x2003
-#define GUIMODE_ML_MENU (lv ? 0xC048 : GUIMODE_MENU)
+#define GUIMODE_ML_MENU 0
 
 #define PLAY_MODE (gui_state == GUISTATE_PLAYMENU && CURRENT_GUI_MODE == GUIMODE_PLAY)
 #define MENU_MODE (gui_state == GUISTATE_PLAYMENU && CURRENT_GUI_MODE == GUIMODE_MENU)
