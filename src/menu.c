@@ -106,6 +106,13 @@ extern struct semaphore * gui_sem;
 static struct semaphore * menu_redraw_sem;
 static int menu_damage;
 static int menu_shown = false;
+static volatile uint32_t menu_task_heartbeat = 0;   /* diagnostics: menu_task loop count */
+static volatile uint32_t menu_redraw_do_count = 0;  /* diagnostics: completed menu draws */
+static volatile uint32_t menu_redraw_stage = 0;     /* diagnostics: last step reached in menu_redraw_do */
+static volatile uint32_t menu_redraw_task_loops = 0;
+static const char * volatile menu_dbg_menu_name = 0;   /* diagnostics: menu being drawn */
+static const char * volatile menu_dbg_entry_name = 0;  /* diagnostics: entry being drawn */
+static volatile uint32_t menu_dbg_entries_done = 0;
 static int menu_lv_transparent_mode; // for ISO, kelvin...
 static int config_dirty = 0;
 
@@ -3446,15 +3453,22 @@ menu_display(
 )
 {
     struct menu_entry * entry = menu->children;
+    menu_redraw_stage = 30;
+    menu_dbg_menu_name = menu->name;
+    menu_dbg_entry_name = 0;
+    menu_dbg_entries_done = 0;
     
     //hide upper menu for vscroll
     int pos = get_menu_selected_pos(menu);
     int num_visible = get_menu_visible_count(menu);
+    menu_redraw_stage = 31;
     int target_height = menu->submenu_height ? menu->submenu_height - 54 : 370;
     if (is_menu_active("Help")) target_height -= 20;
     if (is_menu_active("Focus")) target_height -= 70;
     int natural_height = num_visible * font_large.height;
-    int ideal_num_items = target_height / font_large.height;
+    menu_redraw_stage = 32;   /* next line divides by font_large.height */
+    int ideal_num_items = font_large.height ? target_height / font_large.height : 1;
+    menu_redraw_stage = 33;
 
     /* if the menu items does not exceed max count by too much (e.g. 12 instead of 11),
      * prefer to squeeze them vertically in order to avoid scrolling. */
@@ -3506,8 +3520,10 @@ menu_display(
 
     //<== vscroll
 
+    menu_redraw_stage = 34;
     if (!menu_lv_transparent_mode)
         menu_clean_footer();
+    menu_redraw_stage = 35;
 
     for (int i = 0; i < num_visible && entry; )
     {
@@ -3530,7 +3546,10 @@ menu_display(
             }
             
             // display current entry
+            menu_redraw_stage = 36;
+            menu_dbg_entry_name = entry->name;
             int ok = menu_entry_process(menu, entry, x, y, font_large.height + local_spacing, only_selected);
+            menu_dbg_entries_done++;
             
             // entry asked for custom draw? stop here
             if (!ok)
@@ -3559,8 +3578,10 @@ menu_display(
     }
 
 end:
+    menu_redraw_stage = 37;
     // all menus displayed, now some extra stuff
     menu_post_display();
+    menu_redraw_stage = 38;
 }
 
 static int startswith(char* str, char* prefix)
@@ -4116,7 +4137,11 @@ void menus_display(
                     //~ bmp_printf(FONT_MED, 720 - strlen(menu->name)*font_med.width, 50, menu->name);
                 //~ else
                 if (!junkie_mode)
+                {
+                    menu_redraw_stage = 20;   /* selected tab title text */
                     bmp_printf(FONT(FONT_CANON, fg, NO_BG_ERASE), 5, y, "%s", menu->name);
+                    menu_redraw_stage = 21;
+                }
                 
                 int x1 = x - 1;
                 int x2 = x1 + icon_spacing + 2;
@@ -4179,8 +4204,11 @@ void menus_display(
                 edit_mode ? 1 : 0
             );
             
+            menu_redraw_stage = 40;
             show_vscroll(menu);
+            menu_redraw_stage = 41;
             show_hidden_items(menu, 0);
+            menu_redraw_stage = 42;
         }
     }
     
@@ -4725,10 +4753,6 @@ static void menu_make_sure_selection_is_valid()
 
 CONFIG_INT("menu.upside.down", menu_upside_down, 0);
 
-static volatile uint32_t menu_task_heartbeat = 0;   /* diagnostics: menu_task loop count */
-static volatile uint32_t menu_redraw_do_count = 0;  /* diagnostics: completed menu draws */
-static volatile uint32_t menu_redraw_stage = 0;     /* diagnostics: last step reached in menu_redraw_do */
-static volatile uint32_t menu_redraw_task_loops = 0;
 
 static void
 menu_redraw_do()
@@ -5983,6 +6007,15 @@ static void ring_diag_write(const char *why, struct event *ev, int shown_before,
        (int)ml_refresh_count, (int)ml_refresh_display_needed, (int)ml_redraw_task_loops);
     RD("menu_redraw_task_loops=%d menu_redraw_stage=%d menu_redraw_blocked=%d menu_redraw_queue=0x%08X\n",
        (int)menu_redraw_task_loops, (int)menu_redraw_stage, menu_redraw_blocked, (uint32_t)menu_redraw_queue);
+    {
+        extern uint32_t dyn_fonts;
+        extern struct font font_canon;
+        RD("menu='%s' entry='%s' entries_done=%d\n",
+           menu_dbg_menu_name ? menu_dbg_menu_name : "-",
+           menu_dbg_entry_name ? menu_dbg_entry_name : "-", (int)menu_dbg_entries_done);
+        RD("fonts: dyn_fonts=%d large.h=%d med.h=%d small.h=%d canon.h=%d\n",
+           (int)dyn_fonts, font_large.height, font_med.height, font_small.height, font_canon.height);
+    }
     RD("gui_state=%d CURRENT_GUI_MODE(0x8D70)=0x%X [0x8D6C]=0x%X\n",
        gui_state, CURRENT_GUI_MODE, *(volatile int *)0x8D6C);
     RD("lv=%d lv_paused=%d shooting_mode=%d sensor_cleaning=%d halfshutter=%d\n",
