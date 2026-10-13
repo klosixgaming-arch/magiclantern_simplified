@@ -94,6 +94,12 @@ INIT_FUNC("debugmsg-hack", DebugMsg_hack);
 
 #endif // CONFIG_LVAPP_HACK_DEBUGMSG
 
+/* diagnostics: where the GUI event chain currently is (source line), see RINGDGn.TXT */
+volatile int gui_dbg_line = 0;
+volatile int gui_dbg_param = 0;
+volatile int gui_dbg_type = 0;
+volatile uint32_t gui_dbg_events = 0;
+
 int handle_other_events(struct event * event)
 {
     extern int ml_started;
@@ -456,7 +462,7 @@ int handle_common_events_by_feature(struct event * event)
     // there may be exceptions
 
     /* log button codes, if enabled from the Debug menu */
-    spy_event(event);
+    gui_dbg_line = __LINE__; spy_event(event);
 
 #ifdef FEATURE_POWERSAVE_LIVEVIEW
     // these are required for correct shutdown from "LV paused" state
@@ -473,7 +479,7 @@ int handle_common_events_by_feature(struct event * event)
     { 
         int ans = (ml_shutdown_requested || pre_shutdown_requested || sensor_cleaning);
         idle_wakeup_reset_counters(event->param);
-        if (handle_disp_preset_key(event) == 0) return 0;
+        gui_dbg_line = __LINE__; if (handle_disp_preset_key(event) == 0) return 0;
         return ans;  // if LiveView was resumed, don't do anything else (just wakeup)
     }
 #endif
@@ -490,62 +496,62 @@ int handle_common_events_by_feature(struct event * event)
         last_time_active = get_seconds_clock();
 
     /* convert Q replacement events into BGMT_Q */
-    if (handle_Q_button_equiv(event) == 0) return 0;
+    gui_dbg_line = __LINE__; if (handle_Q_button_equiv(event) == 0) return 0;
 
     #ifdef CONFIG_MENU_WITH_AV
-    if (handle_av_short_for_menu(event) == 0) return 0;
+    gui_dbg_line = __LINE__; if (handle_av_short_for_menu(event) == 0) return 0;
     #endif
 
     /* before module_keys, to be able to process long-press SET/Q events and forward them to modules/scripts */
-    if (handle_longpress_events(event) == 0) return 0;
+    gui_dbg_line = __LINE__; if (handle_longpress_events(event) == 0) return 0;
 
     #ifdef FEATURE_MAGIC_ZOOM
     /* must be before handle_module_keys to allow zoom while recording raw,
      * but also let the raw recording modules block the zoom keys to avoid crashing */
-    if (handle_zoom_overlay(event) == 0) return 0;
+    gui_dbg_line = __LINE__; if (handle_zoom_overlay(event) == 0) return 0;
     #endif
 
-    if (handle_module_keys(event) == 0) return 0;
-    if (handle_flexinfo_keys(event) == 0) return 0;
+    gui_dbg_line = __LINE__; if (handle_module_keys(event) == 0) return 0;
+    gui_dbg_line = __LINE__; if (handle_flexinfo_keys(event) == 0) return 0;
 
     #ifdef FEATURE_DIGITAL_ZOOM_SHORTCUT
-    if (handle_digital_zoom_shortcut(event) == 0) return 0;
+    gui_dbg_line = __LINE__; if (handle_digital_zoom_shortcut(event) == 0) return 0;
     #endif
 
     #ifdef FEATURE_UPSIDE_DOWN
-    if (handle_upside_down(event) == 0) return 0;
+    gui_dbg_line = __LINE__; if (handle_upside_down(event) == 0) return 0;
     #endif
     
     #ifdef FEATURE_SWAP_MENU_ERASE
-    if (handle_swap_menu_erase(event) == 0) return 0;
+    gui_dbg_line = __LINE__; if (handle_swap_menu_erase(event) == 0) return 0;
     #endif
 
     #ifdef FEATURE_SWAP_INFO_PLAY
-    if (handle_swap_info_play(event) == 0) return 0;
+    gui_dbg_line = __LINE__; if (handle_swap_info_play(event) == 0) return 0;
     #endif
 
-    if (handle_ml_menu_erase(event) == 0) return 0;
-    if (handle_ml_menu_keys(event) == 0) return 0;
+    gui_dbg_line = __LINE__; if (handle_ml_menu_erase(event) == 0) return 0;
+    gui_dbg_line = __LINE__; if (handle_ml_menu_keys(event) == 0) return 0;
     
     #ifdef CONFIG_DIGIC_POKE
-    if (handle_digic_poke(event) == 0) return 0;
+    gui_dbg_line = __LINE__; if (handle_digic_poke(event) == 0) return 0;
     #endif
     
     #ifdef FEATURE_MLU_HANDHELD
-    if (handle_mlu_handheld(event) == 0) return 0;
+    gui_dbg_line = __LINE__; if (handle_mlu_handheld(event) == 0) return 0;
     #endif
     
     if (RECORDING && event->param == BGMT_MENU) redraw(); // MENU while RECORDING => force a redraw
     
-    if (handle_buttons_being_held(event) == 0) return 0;
+    gui_dbg_line = __LINE__; if (handle_buttons_being_held(event) == 0) return 0;
     //~ if (handle_morse_keys(event) == 0) return 0;
 
     #ifdef FEATURE_ZOOM_TRICK_5D3 // not reliable
-    if (handle_zoom_trick_event(event) == 0) return 0;
+    gui_dbg_line = __LINE__; if (handle_zoom_trick_event(event) == 0) return 0;
     #endif
     
     #ifdef FEATURE_INTERVALOMETER
-    if (handle_intervalometer(event) == 0) return 0;
+    gui_dbg_line = __LINE__; if (handle_intervalometer(event) == 0) return 0;
     #endif
     
     #ifdef FEATURE_GHOST_IMAGE
@@ -553,74 +559,75 @@ int handle_common_events_by_feature(struct event * event)
     #endif
     
     #if defined(FEATURE_OVERLAYS_IN_PLAYBACK_MODE)
-    if (handle_overlays_playback(event) == 0) return 0;
+    gui_dbg_line = __LINE__; if (handle_overlays_playback(event) == 0) return 0;
     #endif
 
     #if defined(FEATURE_SET_MAINDIAL) || defined(FEATURE_QUICK_ERASE)
-    if (handle_set_wheel_play(event) == 0) return 0;
+    gui_dbg_line = __LINE__; if (handle_set_wheel_play(event) == 0) return 0;
     #endif
 
     #ifdef FEATURE_ARROW_SHORTCUTS
-    if (handle_arrow_keys(event) == 0) return 0;
+    gui_dbg_line = __LINE__; if (handle_arrow_keys(event) == 0) return 0;
     #endif
     
     #ifdef FEATURE_TRAP_FOCUS
-    if (handle_trap_focus(event) == 0) return 0;
+    gui_dbg_line = __LINE__; if (handle_trap_focus(event) == 0) return 0;
     #endif
 
     #ifdef FEATURE_FOLLOW_FOCUS
-    if (handle_follow_focus(event) == 0) return 0;
-    if (handle_follow_focus_save_restore(event) == 0) return 0;
+    gui_dbg_line = __LINE__; if (handle_follow_focus(event) == 0) return 0;
+    gui_dbg_line = __LINE__; if (handle_follow_focus_save_restore(event) == 0) return 0;
     #endif
     
     #ifdef FEATURE_LV_ZOOM_SETTINGS
-    if (handle_zoom_x5_x10(event) == 0) return 0;
+    gui_dbg_line = __LINE__; if (handle_zoom_x5_x10(event) == 0) return 0;
     #endif
     
     #if !defined(CONFIG_50D) && !defined(CONFIG_5D2) && !defined(CONFIG_5D3) && !defined(CONFIG_6D)
-    if (handle_quick_access_menu_items(event) == 0) return 0;
+    gui_dbg_line = __LINE__; if (handle_quick_access_menu_items(event) == 0) return 0;
     #endif
     
 #ifdef CONFIG_RESTORE_AFTER_FORMAT
-    if (handle_keep_ml_after_format_toggle(event) == 0) return 0;
+    gui_dbg_line = __LINE__; if (handle_keep_ml_after_format_toggle(event) == 0) return 0;
 #endif
         
     #ifdef FEATURE_FPS_OVERRIDE
-    if (handle_fps_events(event) == 0) return 0;
+    gui_dbg_line = __LINE__; if (handle_fps_events(event) == 0) return 0;
     #endif
     
     #ifdef FEATURE_EXPO_PRESET
-    if (handle_expo_preset(event) == 0) return 0;
+    gui_dbg_line = __LINE__; if (handle_expo_preset(event) == 0) return 0;
     #endif
     
     #ifdef FEATURE_LV_DISPLAY_PRESETS
-    if (handle_disp_preset_key(event) == 0) return 0;
+    gui_dbg_line = __LINE__; if (handle_disp_preset_key(event) == 0) return 0;
     #endif
     
     #if defined(FEATURE_QUICK_ZOOM) || defined(FEATURE_REMEMBER_LAST_ZOOM_POS_5D3)
-    if (handle_fast_zoom_in_play_mode(event) == 0) return 0;
+    gui_dbg_line = __LINE__; if (handle_fast_zoom_in_play_mode(event) == 0) return 0;
     #endif
     
     #ifdef FEATURE_LV_FOCUS_BOX_FAST
-    if (handle_fast_zoom_box(event) == 0) return 0;
+    gui_dbg_line = __LINE__; if (handle_fast_zoom_box(event) == 0) return 0;
     #endif
     
     #ifdef FEATURE_AF_PATTERNS
-    if (handle_af_patterns(event) == 0) return 0;
+    gui_dbg_line = __LINE__; if (handle_af_patterns(event) == 0) return 0;
     #endif
 
     #ifdef FEATURE_VOICE_TAGS
-    if (handle_voice_tags(event) == 0) return 0;
+    gui_dbg_line = __LINE__; if (handle_voice_tags(event) == 0) return 0;
     #endif
 
     #if defined(FEATURE_LV_BUTTON_PROTECT) || defined(FEATURE_LV_BUTTON_RATE)
-    if (handle_lv_play(event) == 0) return 0;
+    gui_dbg_line = __LINE__; if (handle_lv_play(event) == 0) return 0;
     #endif
     
     /* if nothing else uses the arrow keys, use them for moving the focus box */
     /* (some cameras may block it in certain modes) */
-    if (handle_lv_afframe_workaround(event) == 0) return 0;
+    gui_dbg_line = __LINE__; if (handle_lv_afframe_workaround(event) == 0) return 0;
 
+    gui_dbg_line = __LINE__;
     return 1;
 }
 

@@ -6001,6 +6001,12 @@ static void ring_diag_write(const char *why, struct event *ev, int shown_before,
     RD("=== R6 GUI RING DIAG #%d: %s ===\n", ring_diag_writes + 1, why);
     RD("event type=%d param=0x%X obj=0x%08X arg=0x%X\n", ev->type, ev->param, (uint32_t)ev->obj, ev->arg);
     RD("led_code=%d menu_shown before=%d after=%d\n", code, shown_before, shown_after);
+    {
+        extern volatile int gui_dbg_line, gui_dbg_param, gui_dbg_type;
+        extern volatile uint32_t gui_dbg_events;
+        RD("GUI task: events=%d current: type=%d param=0x%X line=%d (gui-common.c/gui.c; -1=in Canon handler, -2=idle)\n",
+           (int)gui_dbg_events, gui_dbg_type, gui_dbg_param, gui_dbg_line);
+    }
     RD("ml_gui_task_active=%d menu_task_heartbeat=%d menu_redraw_do_count=%d\n",
        ml_gui_task_active, (int)menu_task_heartbeat, (int)menu_redraw_do_count);
     RD("ml_refresh_count=%d ml_refresh_display_needed=%d ml_redraw_task_loops=%d\n",
@@ -6086,7 +6092,8 @@ static void gui_ring_poll_task(void *unused)
          * the index observed one cycle (>=10 ms) ago - those slots are complete. */
         uint32_t cur = *ring_index;
 
-        if (target < slots && !ml_gui_task_active)
+        int gui_active = ml_gui_task_active;
+        if (target < slots)
         {
             uint32_t backlog = (target + slots - last) % slots;
             if (backlog > 64)
@@ -6127,7 +6134,9 @@ static void gui_ring_poll_task(void *unused)
 
                     int shown_before = menu_shown;
                     ring_led_burst(1);                 /* TRASH detected */
-                    give_semaphore(gui_sem);           /* menu_task toggles menu_open()/menu_close() */
+                    if (!gui_active)
+                        give_semaphore(gui_sem);       /* menu_task toggles menu_open()/menu_close() */
+                    /* else: ml_gui_main_task handles TRASH itself; we only observe + log */
 
                     msleep(700);
                     int shown_after = menu_shown;
@@ -6137,7 +6146,7 @@ static void gui_ring_poll_task(void *unused)
                     continue;
                 }
 
-                if (ev.type == 0 && menu_shown && !IS_FAKE((&ev)))
+                if (!gui_active && ev.type == 0 && menu_shown && !IS_FAKE((&ev)))
                 {
                     /* menu navigation: same handler ml_gui_main_task would call */
                     handle_ml_menu_keys(&ev);

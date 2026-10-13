@@ -61,6 +61,8 @@
  * 500D : counter_0x04 <-> msg_queue_0x34
  */
 
+extern volatile int gui_dbg_line, gui_dbg_param, gui_dbg_type;
+extern volatile uint32_t gui_dbg_events;
 struct semaphore * gui_sem;
 
 // return 0 if you want to block this event
@@ -69,7 +71,9 @@ static int handle_buttons(struct event * event)
     ASSERT(event->type == 0)
 
     if (event->type != 0) return 1; // only handle events with type=0 (buttons)
+    gui_dbg_line = __LINE__;
     if (handle_common_events_startup(event) == 0) return 0;
+    gui_dbg_line = __LINE__;
     extern int ml_started;
     if (!ml_started) return 1;
 
@@ -139,6 +143,10 @@ void ml_gui_main_task()
         }
 
         index = event->type;
+        gui_dbg_events++;
+        gui_dbg_type  = event->type;
+        gui_dbg_param = event->param;
+        gui_dbg_line  = __LINE__;
 
         if (!magic_is_off())
         {
@@ -170,8 +178,10 @@ void ml_gui_main_task()
         }
 
         void(*f)(struct event *) = funcs[index];
+        gui_dbg_line = -1;   /* inside Canon's handler */
         if (f != NULL)
             f(event);
+        gui_dbg_line = -2;   /* idle, waiting for next event */
     }
 }
 
