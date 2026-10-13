@@ -110,6 +110,10 @@ static volatile uint32_t menu_task_heartbeat = 0;   /* diagnostics: menu_task lo
 static volatile uint32_t menu_redraw_do_count = 0;  /* diagnostics: completed menu draws */
 static volatile uint32_t menu_redraw_stage = 0;     /* diagnostics: last step reached in menu_redraw_do */
 static volatile uint32_t menu_redraw_task_loops = 0;
+volatile int ml_font_wait_ms = -1;                    /* diagnostics: card wait before font load */
+static volatile int menu_open_count = 0, menu_close_count = 0;
+static volatile int menu_last_open_param = 0, menu_last_open_line = 0, menu_last_open_ms = 0;
+static volatile int menu_last_close_param = 0, menu_last_close_line = 0, menu_last_close_ms = 0;
 static const char * volatile menu_dbg_menu_name = 0;   /* diagnostics: menu being drawn */
 static const char * volatile menu_dbg_entry_name = 0;  /* diagnostics: entry being drawn */
 static volatile uint32_t menu_dbg_entries_done = 0;
@@ -4759,6 +4763,13 @@ menu_redraw_do()
 {
     menu_redraw_stage = 1;
     menu_damage = 0;
+
+    /* no fonts loaded => any text draw kills this task (RINGDG: stage 20 forever) */
+    if (font_large.height == 0 || font_med.height == 0)
+    {
+        menu_redraw_stage = 99;
+        return;
+    }
     //~ g_submenu_width = 720;
 
     if (!DISPLAY_IS_ON)
@@ -5738,6 +5749,13 @@ static void menu_open()
     menu_help_active = 0;
     keyrepeat = 0;
     menu_shown = 1;
+    {
+        extern volatile int gui_dbg_line, gui_dbg_param;
+        menu_open_count++;
+        menu_last_open_param = gui_dbg_param;
+        menu_last_open_line = gui_dbg_line;
+        menu_last_open_ms = get_ms_clock();
+    }
     //~ menu_hidden_should_display_help = 0;
     if (lv)
         menu_zebras_mirror_dirty = 1;
@@ -5758,6 +5776,13 @@ static void menu_close()
     if (!menu_shown)
         return;
     menu_shown = false;
+    {
+        extern volatile int gui_dbg_line, gui_dbg_param;
+        menu_close_count++;
+        menu_last_close_param = gui_dbg_param;
+        menu_last_close_line = gui_dbg_line;
+        menu_last_close_ms = get_ms_clock();
+    }
 
     customize_mode = 0;
     update_disp_mode_bits_from_params();
@@ -6019,8 +6044,11 @@ static void ring_diag_write(const char *why, struct event *ev, int shown_before,
         RD("menu='%s' entry='%s' entries_done=%d\n",
            menu_dbg_menu_name ? menu_dbg_menu_name : "-",
            menu_dbg_entry_name ? menu_dbg_entry_name : "-", (int)menu_dbg_entries_done);
-        RD("fonts: dyn_fonts=%d large.h=%d med.h=%d small.h=%d canon.h=%d\n",
-           (int)dyn_fonts, font_large.height, font_med.height, font_small.height, font_canon.height);
+        RD("fonts: dyn_fonts=%d large.h=%d med.h=%d small.h=%d canon.h=%d card_wait_ms=%d\n",
+           (int)dyn_fonts, font_large.height, font_med.height, font_small.height, font_canon.height, ml_font_wait_ms);
+        RD("menu opens=%d (last: param=0x%X line=%d t=%d)  closes=%d (last: param=0x%X line=%d t=%d)  now=%d\n",
+           menu_open_count, menu_last_open_param, menu_last_open_line, menu_last_open_ms,
+           menu_close_count, menu_last_close_param, menu_last_close_line, menu_last_close_ms, get_ms_clock());
     }
     RD("gui_state=%d CURRENT_GUI_MODE(0x8D70)=0x%X [0x8D6C]=0x%X\n",
        gui_state, CURRENT_GUI_MODE, *(volatile int *)0x8D6C);

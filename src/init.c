@@ -2372,6 +2372,22 @@ static void my_big_init_task()
         qprintf("Error from apply_normal_patches: %d\n", err);
 #endif
 
+#ifdef CONFIG_DIGIC_X
+    /* With the task hook active, ml_init starts as soon as the first GUI event
+     * arrives - before the card filesystem is ready - and every font load fails
+     * (RINGDG: dyn_fonts=0). Wait up to 6 s for the font files to be readable. */
+    {
+        extern volatile int ml_font_wait_ms;
+        uint32_t fsize = 0;
+        int t0 = get_ms_clock();
+        while (FIO_GetFileSize("ML/FONTS/ARGNOR32.RBF", &fsize) != 0 || fsize == 0)
+        {
+            if (get_ms_clock() - t0 > 6000) break;
+            msleep(100);
+        }
+        ml_font_wait_ms = get_ms_clock() - t0;
+    }
+#endif
     _load_fonts();
 
     // SJE not sure on best place to do this.  Before HELLO_WORLD is nice
