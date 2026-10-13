@@ -2455,8 +2455,16 @@ static void my_big_init_task()
 #endif
 
     ml_started = 1;
-    /* Boot milestones 1-5 proven on hardware; only signal "ML fully loaded". */
+    /* Boot milestones 1-5 proven on hardware; only signal "ML fully loaded".
+     * 1 short blink  = ML loaded (key poller mode, cannot block Canon keys)
+     * 2 short blinks = ML loaded AND ml_gui_main_task replaced Canon's GUI task */
+    extern volatile int ml_gui_task_active;
     ml_ready_blink();
+    if (ml_gui_task_active)
+    {
+        msleep(250);
+        ml_ready_blink();
+    }
 }
 
 /** Blocks execution until config is read */

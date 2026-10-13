@@ -27,8 +27,10 @@
 #undef CONFIG_PROP_REQUEST_CHANGE
 #undef CONFIG_AUTOBACKUP_ROM
 
-// BISECT: skip task dispatch hook
-#define CONFIG_NO_TASK_HOOK
+// Task dispatch hook re-enabled (2026-10-13): 0x413C, task_trampoline 0xE011E3E8,
+// GMT_FUNCTABLE and gui_main_struct all verified against ROM; same as R5.
+// With it, ml_gui_main_task replaces GuiMainTask and ML can block keys from Canon.
+//#define CONFIG_NO_TASK_HOOK
 
 /* With CONFIG_NO_TASK_HOOK, TASK_OVERRIDE(gui_main_task, ml_gui_main_task) never
  * takes effect, so ML's button handlers never see any key. Poll Canon's GUI event

@@ -4,8 +4,9 @@
 /* EOS R6 1.7.0 (DIGIC X architecture, aligned with R5) */
 
 /* Dials & Wheels */
-#define BGMT_WHEEL_DOWN              0x00 // Back Quick Control Dial (wheel) left
-#define BGMT_WHEEL_UP                0x01 // Back Quick Control Dial (wheel) right
+/* Rear Quick Control Dial (around SET): 0x04 / 0x05 per KEYLOG.TXT on hardware */
+#define BGMT_WHEEL_UP                0x04 // rear SET wheel, one direction
+#define BGMT_WHEEL_DOWN              0x05 // rear SET wheel, other direction
 #define BGMT_DIAL3_LEFT              0x02 // Quick Control Dial 2 left
 #define BGMT_DIAL3_RIGHT             0x03 // Quick Control Dial 2 right
 #define BGMT_WHEEL_LEFT              0x08 // Top Main Dial left

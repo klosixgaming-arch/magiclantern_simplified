@@ -6118,6 +6118,9 @@ static void gui_ring_poll_task(void *unused)
                         continue;
                     }
 
+                    /* TRASH is Canon's erase key outside LiveView (playback etc.) */
+                    if (!lv && !menu_shown) continue;
+
                     int now = get_ms_clock();
                     if (now - last_trash_ms < 300) continue;   /* debounce */
                     last_trash_ms = now;
