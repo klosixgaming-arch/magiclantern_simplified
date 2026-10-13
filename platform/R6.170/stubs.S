@@ -74,7 +74,7 @@ THUMB_FN(0xE07E1672,  give_semaphore)                       /* SystemIF::KerSem.
 /** Queue **/
 THUMB_FN(0xE07C48C4,  msg_queue_create)                     /* SystemIF::KerQueue.c */
 THUMB_FN(0xE07C4988,  msg_queue_receive)                    /* SystemIF::KerQueue.c */
-THUMB_FN(0xE07C4A1A,  msg_queue_post)                       /* SystemIF::KerQueue.c */
+THUMB_FN(0xE07C4AE6,  msg_queue_post)                       /* KerQueue.c; = receive+0x15E like R5/R. Called by Canon's GUI poster 0xE04E4666. (0xE07C4A1A is a receive variant!) */
 
 /** Timers **/
 THUMB_FN(0xE058F4D4,  SetHPTimerAfterNow)                   /* System::HPTimer.c */

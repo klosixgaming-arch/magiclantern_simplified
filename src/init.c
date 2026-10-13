@@ -186,12 +186,7 @@ call_init_funcs()
         thunk entry = (thunk) init_func->entry;
         entry();
         idx++;
-        if (idx == 12)
-        {
-            dbg_blink(3); // Milestone 3: first 12 init functions completed
-        }
     }
-    dbg_blink(4); // Milestone 4: all 24 init functions completed
 }
 
 static void nop( void ) { }
@@ -2308,19 +2303,29 @@ static void led_fade(int arg1, void * on)
 /* This runs ML initialization routines and starts user tasks.
  * Unlike init_task, from here we can do file I/O and others.
  */
+/* LED burst for error codes. Yields with msleep (no busy-waits). */
 void dbg_blink(int n)
 {
 #if defined(CARD_LED_ADDRESS) && defined(LEDON) && defined(LEDOFF)
+    if (n > 6) n = 6;   /* hard limit: never more than 6 blinks */
     for (int k = 0; k < n; k++)
     {
         *(volatile uint32_t *)CARD_LED_ADDRESS = LEDON;
-        for (volatile int j = 0; j < 12500000; j++);
+        msleep(250);
         *(volatile uint32_t *)CARD_LED_ADDRESS = LEDOFF;
-        for (volatile int j = 0; j < 12500000; j++);
-        msleep(10);
+        msleep(250);
     }
-    msleep(20);
-    for (volatile int j = 0; j < 30000000; j++);
+    msleep(500);
+#endif
+}
+
+/* One short blink: ML finished booting. */
+static void ml_ready_blink(void)
+{
+#if defined(CARD_LED_ADDRESS) && defined(LEDON) && defined(LEDOFF)
+    *(volatile uint32_t *)CARD_LED_ADDRESS = LEDON;
+    msleep(150);
+    *(volatile uint32_t *)CARD_LED_ADDRESS = LEDOFF;
 #endif
 }
 
@@ -2332,7 +2337,6 @@ static void my_big_init_task()
     extern int _set_at_startup;
     _set_at_startup = config_flag_file_setting_load("ML/SETTINGS/REQUIRE.SET");
 
-    dbg_blink(1); // Milestone 1: Memory, card, and startup config initialized
 
     // at this point, gui_main_task should be started and should be able to tell whether SET was pressed at startup
     if (magic_off_request != _set_at_startup)
@@ -2397,7 +2401,6 @@ static void my_big_init_task()
     _ml_cbr_init();
     menu_init();
     debug_init();
-    dbg_blink(2); // Milestone 2: Menus & GUI subsystem ready
 
     call_init_funcs(); // Milestone 3 (func 12) and Milestone 4 (func 24) are inside
     msleep(200); // leave some time for property handlers to run
@@ -2422,7 +2425,6 @@ static void my_big_init_task()
     #endif
 
     _hold_your_horses = 0; // config read, other overriden tasks may start doing their job
-    dbg_blink(5); // Milestone 5: Config loaded and locks released
 
     // Create all of our auto-create tasks, defined via TASK_CREATE()
     extern struct task_create _tasks_start[];
@@ -2453,7 +2455,8 @@ static void my_big_init_task()
 #endif
 
     ml_started = 1;
-    dbg_blink(6); // Milestone 6: All tasks started, ML is fully LIVE!
+    /* Boot milestones 1-5 proven on hardware; only signal "ML fully loaded". */
+    ml_ready_blink();
 }
 
 /** Blocks execution until config is read */
